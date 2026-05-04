@@ -1,0 +1,37 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+bin/
+lib/
+
+# Home Assistant runtime & data
+home-assistant.log*
+*.db
+*.db-shm
+*.db-wal
+.HA_VERSION
+.storage/
+# This ensures translations folder exists but is empty if needed
+custom_components/kollektivtrafik_sverige/translations/.placeholder
+
+# Sensitive Info (Safety)
+.google.token
+.spotify.token
+.env
+secrets.yaml
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db

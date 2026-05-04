@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "API Key",
+        "description": "Enter your Trafiklab Realtime API key.\n\nYou must first create a project here:\n{project_link}\n\nThen enable the 'Trafiklab Realtime APIs' on this page:\n{realtime_api_link}",
+        "data": {
+          "api_key": "API Key"
+        }
+      },
+      "stop": {
+        "title": "Stop ID",
+        "description": "Enter the stop ID you want to monitor.\n\nYou can search for stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section, enter a stop name, enter your API key, and open the generated URL in your browser.",
+        "data": {
+          "stop_id": "Stop ID"
+        }
+      },
+      "filters": {
+        "title": "Filters",
+        "description": "Configure line and direction filters.",
+        "data": {
+          "line_filter": "Line Filter",
+          "direction_filter": "Direction Filter"
+        }
+      },
+      "time_windows": {
+        "title": "Time Windows",
+        "description": "Optional polling windows (e.g. 06:00-10:00, 16:00-22:00).",
+        "data": {
+          "time_windows": "Time Windows"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "The API key is invalid.",
+      "invalid_stop_id": "The stop ID is invalid.",
+      "cannot_connect": "Unable to connect to the API."
+    },
+    "abort": {
+      "already_configured": "This stop and line combination is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Update filters and time windows.",
+        "data": {
+          "line_filter": "Line Filter",
+          "direction_filter": "Direction Filter",
+          "time_windows": "Time Windows"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  ruff:
+    name: Ruff Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check with Ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          # We use 'check' to surface issues. 
+          # Remove '--fix' in CI to prevent false passes.
+          args: "check" 
+
+      - name: Check Formatting
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: "format --check"

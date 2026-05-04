@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "API Key",
+        "description": "Enter your Trafiklab Realtime API key.\n\nYou can find or create keys at: https://developer.trafiklab.se/",
+        "data": {
+          "api_key": "API Key"
+        }
+      },
+      "stop": {
+        "title": "Stop ID",
+        "description": "Enter the numeric Stop ID you want to monitor.",
+        "data": {
+          "stop_id": "Stop ID"
+        }
+      },
+      "filters": {
+        "title": "Filters",
+        "description": "Filter departures to keep your dashboard clean.",
+        "data": {
+          "line_filter": "Line Number (e.g., 4 or 677)",
+          "direction_filter": "Direction (Optional)"
+        }
+      },
+      "time_windows": {
+        "title": "Active Polling Windows",
+        "description": "Enter time ranges when you want the sensor to poll frequently (e.g., 07:00-09:00, 16:00-18:00). Leave empty for 24/7 polling.",
+        "data": {
+          "time_windows": "Time Windows (comma separated)"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "The API key provided was rejected (403).",
+      "invalid_stop_id": "The stop ID could not be found (404).",
+      "cannot_connect": "Unable to connect to Trafiklab servers.",
+      "unknown_error": "An unexpected error occurred. Check logs for details."
+    },
+    "abort": {
+      "already_configured": "This stop and line combination is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Adjust Settings",
+        "description": "Update filters or polling windows for this stop.",
+        "data": {
+          "line_filter": "Line Number",
+          "direction_filter": "Direction",
+          "time_windows": "Time Windows (comma separated)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "departure_1": { "name": "Next Departure" },
+      "departure_2": { "name": "Second Departure" },
+      "departure_3": { "name": "Third Departure" },
+      "departure_4": { "name": "Fourth Departure" },
+      "departure_5": { "name": "Fifth Departure" }
+    }
+  }
+}
