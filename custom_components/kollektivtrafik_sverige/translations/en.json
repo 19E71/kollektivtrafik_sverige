@@ -3,39 +3,38 @@
     "step": {
       "user": {
         "title": "API Key",
-        "description": "Enter your Trafiklab Realtime API key.\n\nYou can find or create keys at: https://developer.trafiklab.se/",
+        "description": "Enter your Trafiklab Realtime API key.\n\nYou must first create a project here:\n{project_link}\n\nThen enable the 'Trafiklab Realtime APIs' on this page:\n{realtime_api_link}",
         "data": {
           "api_key": "API Key"
         }
       },
       "stop": {
         "title": "Stop ID",
-        "description": "Enter the numeric Stop ID you want to monitor.",
+        "description": "Enter the stop ID you want to monitor.\n\nYou can search for stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section, enter a stop name, enter your API key, and open the generated URL in your browser.",
         "data": {
           "stop_id": "Stop ID"
         }
       },
       "filters": {
         "title": "Filters",
-        "description": "Filter departures to keep your dashboard clean.",
+        "description": "Configure line and direction filters.",
         "data": {
-          "line_filter": "Line Number (e.g., 4 or 677)",
-          "direction_filter": "Direction (Optional)"
+          "line_filter": "Line Filter",
+          "direction_filter": "Direction Filter"
         }
       },
       "time_windows": {
-        "title": "Active Polling Windows",
-        "description": "Enter time ranges when you want the sensor to poll frequently (e.g., 07:00-09:00, 16:00-18:00). Leave empty for 24/7 polling.",
+        "title": "Time Windows",
+        "description": "Optional polling windows (e.g. 06:00-10:00, 16:00-22:00).",
         "data": {
-          "time_windows": "Time Windows (comma separated)"
+          "time_windows": "Time Windows"
         }
       }
     },
     "error": {
-      "invalid_api_key": "The API key provided was rejected (403).",
-      "invalid_stop_id": "The stop ID could not be found (404).",
-      "cannot_connect": "Unable to connect to Trafiklab servers.",
-      "unknown_error": "An unexpected error occurred. Check logs for details."
+      "invalid_api_key": "The API key is invalid.",
+      "invalid_stop_id": "The stop ID is invalid.",
+      "cannot_connect": "Unable to connect to the API."
     },
     "abort": {
       "already_configured": "This stop and line combination is already configured."
@@ -44,12 +43,12 @@
   "options": {
     "step": {
       "init": {
-        "title": "Adjust Settings",
-        "description": "Update filters or polling windows for this stop.",
+        "title": "Options",
+        "description": "Update filters and time windows.",
         "data": {
-          "line_filter": "Line Number",
-          "direction_filter": "Direction",
-          "time_windows": "Time Windows (comma separated)"
+          "line_filter": "Line Filter",
+          "direction_filter": "Direction Filter",
+          "time_windows": "Time Windows"
         }
       }
     }

@@ -89,7 +89,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_stop()
 
         return self.async_show_form(
-            step_id="user", data_schema=vol.Schema({vol.Required(CONF_API_KEY): str})
+            step_id="user",
+            data_schema=vol.Schema({vol.Required(CONF_API_KEY): str}),
+            description_placeholders={
+                "project_link": "https://www.trafiklab.se/my-account/projects/",
+                "realtime_api_link": "https://www.trafiklab.se/api/trafiklab-realtime-api/",
+            },
         )
 
     async def async_step_stop(
@@ -115,6 +120,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="stop",
             data_schema=vol.Schema({vol.Required(CONF_STOP_ID): str}),
             errors=errors,
+            description_placeholders={
+                "stop_lookup_link": "https://www.trafiklab.se/api/gtfs-sverige-2/stop-lookup/"
+            },
         )
 
     async def async_step_filters(
@@ -145,8 +153,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
 
-            # Note: For simplicity in the UI, we're accepting a comma-separated string
-            # and converting it to a list for storage.
             raw_windows = user_input.get(CONF_TIME_WINDOWS, "")
             windows = [w.strip() for w in raw_windows.split(",")] if raw_windows else []
 
@@ -186,7 +192,6 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
     ) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            # Convert string back to list before saving
             raw_windows = user_input.get(CONF_TIME_WINDOWS, "")
             user_input[CONF_TIME_WINDOWS] = (
                 [w.strip() for w in raw_windows.split(",")] if raw_windows else []
@@ -194,7 +199,6 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
 
             return self.async_create_entry(title="", data=user_input)
 
-        # Convert list to string for UI editing
         current_windows = self.config_entry.options.get(CONF_TIME_WINDOWS, [])
         windows_str = ",".join(current_windows)
 

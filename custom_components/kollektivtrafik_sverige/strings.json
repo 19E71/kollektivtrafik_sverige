@@ -52,5 +52,14 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "departure_1": { "name": "Next Departure" },
+      "departure_2": { "name": "Second Departure" },
+      "departure_3": { "name": "Third Departure" },
+      "departure_4": { "name": "Fourth Departure" },
+      "departure_5": { "name": "Fifth Departure" }
+    }
   }
 }
