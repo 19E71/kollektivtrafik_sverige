@@ -1,6 +1,6 @@
 <p align="center">
- <h1 align="center">Kollektivtrafik Sverige</h1>
-<img src="custom_components/kollektivtrafik_sverige/brand/icon.png" width="150" height="150">
+  <img src="custom_components/kollektivtrafik_sverige/brand/icon.png" width="150" height="150" style="display: block; margin: 0 auto;">
+  <h1 align="center">Kollektivtrafik Sverige</h1>
   <p align="center">
     <b>Home Assistant integration for Swedish public transport realtime departures.</b><br>
     Powered by the Trafiklab Realtime APIs.
