@@ -17,10 +17,10 @@ from homeassistant.util import dt as dt_util
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..api import KollektivtrafikApiClient
-from ..parser import parse_departures_response
-from ..filters import filter_departures
-from ..queue import DepartureQueue
-from ..polling import calculate_next_interval, QuotaTracker
+from .parser import parse_departures_response
+from .filters import filter_departures
+from .queue import DepartureQueue
+from .polling import calculate_next_interval, QuotaTracker
 from ..const import (
     CONF_API_KEY,
     CONF_STOP_ID,
