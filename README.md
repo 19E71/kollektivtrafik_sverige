@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="brand/icon.png" width="150" height="150">
-  <h1 align="center">Kollektivtrafik Sverige</h1>
+ <h1 align="center">Kollektivtrafik Sverige</h1>
+<img src="custom_components/kollektivtrafik_sverige/brand/icon.png" width="150" height="150">
   <p align="center">
     <b>Home Assistant integration for Swedish public transport realtime departures.</b><br>
     Powered by the Trafiklab Realtime APIs.
@@ -26,7 +26,7 @@
 - **Direction filtering** (`0`, `1`, or empty for both).
 - **Optional time windows** (e.g., `06:00-10:00, 16:00-22:00`).
 - **Minimal API usage** (safe for Trafiklab quotas).
-- **Modern Home Assistant config flow** — No YAML required.
+- **Modern Home Assistant** — No YAML required.
 - **Clean, predictable entity naming** with no arrivals or bloat.
 
 ---
