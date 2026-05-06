@@ -14,6 +14,12 @@ from typing import Final
 DOMAIN: Final = "kollektivtrafik_sverige"
 
 # ---------------------------------------------------------------------------
+# Logic limits
+# ---------------------------------------------------------------------------
+
+MAX_DEPARTURES: Final = 5
+
+# ---------------------------------------------------------------------------
 # Configuration keys
 # ---------------------------------------------------------------------------
 
@@ -24,11 +30,20 @@ CONF_DIRECTION_FILTER: Final = "direction_filter"
 CONF_TIME_WINDOWS: Final = "time_windows"
 
 # ---------------------------------------------------------------------------
-# API endpoints (Realtime API)
+# API endpoints (Trafiklab Realtime API)
 # ---------------------------------------------------------------------------
 
 API_BASE_URL: Final = "https://realtime-api.trafiklab.se/v1"
 DEPARTURES_ENDPOINT: Final = "/departures"
+
+# UI Links matching your verified README
+PROJECT_LINK: Final = "https://developer.trafiklab.se/project/list"
+REALTIME_API_LINK: Final = (
+    "https://www.trafiklab.se/api/our-apis/trafiklab-realtime-apis"
+)
+STOP_LOOKUP_LINK: Final = (
+    "https://www.trafiklab.se/api/our-apis/trafiklab-realtime-apis/stop-lookup"
+)
 
 # ---------------------------------------------------------------------------
 # Sensor attribute keys
@@ -39,7 +54,6 @@ ATTR_DESTINATION: Final = "destination"
 ATTR_DIRECTION: Final = "direction"
 ATTR_EXPECTED_TIME: Final = "expected_time"
 ATTR_SCHEDULED_TIME: Final = "scheduled_time"
-# Swapped ATTR_REAL_TIME for ATTR_TIMESTAMP to match our 60min+ logic
 ATTR_TIMESTAMP: Final = "timestamp"
 ATTR_TRANSPORT_MODE: Final = "transport_mode"
 ATTR_DEVIATIONS: Final = "deviations"

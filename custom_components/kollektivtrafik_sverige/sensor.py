@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
@@ -44,11 +43,13 @@ async def async_setup_entry(
 
 
 class DepartureSensor(CoordinatorEntity, SensorEntity):
-    """A single departure sensor (one of five)."""
+    """A single departure sensor."""
 
     _attr_has_entity_name = True
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:bus-clock"
+    # Keeping state class as measurement for the 'min' unit
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "min"
 
     def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
         """Initialize the sensor."""
@@ -56,14 +57,9 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
         self._entry = entry
         self._index = index
-
-        # Unique ID must be truly unique across the whole HA instance
         self._attr_unique_id = f"{entry.entry_id}_departure_{index}"
-
-        # Translation key allows for localized names via strings.json
         self._attr_translation_key = f"departure_{index + 1}"
 
-        # Link all sensors to a single device in the UI
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -73,34 +69,25 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | str | None:
-        """Return minutes until departure or timestamp if far away."""
+        """Return minutes until departure."""
         data = self._get_departure()
         if not data:
             return None
 
-        # If the queue decided minutes are too far off (>60min),
-        # it provides a 'timestamp'. We return that as the state.
-        return data.get("minutes") or data.get("timestamp")
+        # Prefer minutes (int) for the state.
+        # If it's a timestamp string, we return it, but HA might
+        # complain about the 'min' unit. Best to return 0 if it's immediate.
+        val = data.get("minutes")
+        if val is not None:
+            return val
 
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Return 'min' only if the value is numeric."""
-        data = self._get_departure()
-        if data and data.get("minutes") is not None:
-            return "min"
-        return None
-
-    @property
-    def device_class(self) -> SensorDeviceClass | None:
-        """Return TIMESTAMP device class if showing a timestamp."""
-        data = self._get_departure()
-        if data and data.get("timestamp"):
-            return SensorDeviceClass.TIMESTAMP
-        return None
+        # Fallback: if data is far away, we still return the minutes calculated by coordinator
+        # to keep the unit 'min' valid.
+        return data.get("minutes_calculated") or None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional attributes."""
+        """Return additional attributes with safe defaults."""
         data = self._get_departure()
         if not data:
             return {}
@@ -112,17 +99,16 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
             ATTR_EXPECTED_TIME: data.get("expected_time"),
             ATTR_SCHEDULED_TIME: data.get("scheduled_time"),
             ATTR_TRANSPORT_MODE: data.get("transport_mode"),
-            ATTR_DEVIATIONS: data.get("deviations"),
+            ATTR_DEVIATIONS: data.get("deviations", []),
         }
 
     def _get_departure(self) -> dict[str, Any] | None:
-        """Return the departure dict for this sensor index from coordinator data."""
-        if not self.coordinator.data:
+        """Return the departure dict for this sensor index."""
+        if not self.coordinator.data or "departures" not in self.coordinator.data:
             return None
 
-        deps = self.coordinator.data.get("departures")
-        # Ensure the index exists in the current 10-buffer/5-exposed list
-        if not deps or self._index >= len(deps):
+        deps = self.coordinator.data["departures"]
+        if self._index >= len(deps):
             return None
 
         return deps[self._index]

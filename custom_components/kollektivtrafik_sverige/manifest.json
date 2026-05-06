@@ -1,6 +1,7 @@
 {
   "domain": "kollektivtrafik_sverige",
   "name": "Kollektivtrafik Sverige",
+  "branding": true,
   "codeowners": ["@19e71"],
   "config_flow": true,
   "documentation": "https://github.com/19e71/kollektivtrafik_sverige",

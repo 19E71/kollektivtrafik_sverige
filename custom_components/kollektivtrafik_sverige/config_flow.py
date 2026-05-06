@@ -28,6 +28,9 @@ from .const import (
     ERROR_STOP_NOT_FOUND,
     ERROR_CONNECTION,
     ERROR_UNKNOWN,
+    PROJECT_LINK,
+    REALTIME_API_LINK,
+    STOP_LOOKUP_LINK,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,27 +48,27 @@ class InvalidStopId(HomeAssistantError):
     """Error to indicate the stop ID is invalid."""
 
 
-class UnknownError(HomeAssistantError):
-    """Catch-all for unexpected issues."""
+async def validate_api_key(hass: HomeAssistant, api_key: str) -> None:
+    """Validate ONLY the API key using a known stop ID (Stockholm C)."""
+    client = KollektivtrafikApiClient(api_key, session=async_get_clientsession(hass))
+    try:
+        # 740000001 is a permanent ID for testing
+        await client.get_departures("740000001")
+    except KollektivtrafikApiError as err:
+        if "403" in str(err):
+            raise InvalidApiKey from err
+        raise CannotConnect from err
 
 
-async def validate_api_key_and_stop(
-    hass: HomeAssistant, api_key: str, stop_id: str
-) -> None:
-    """Validate credentials via API request."""
+async def validate_stop_id(hass: HomeAssistant, api_key: str, stop_id: str) -> None:
+    """Validate the specific stop ID."""
     client = KollektivtrafikApiClient(api_key, session=async_get_clientsession(hass))
     try:
         await client.get_departures(stop_id)
     except KollektivtrafikApiError as err:
-        _LOGGER.error("API validation failed: %s", err)
-        if "403" in str(err):
-            raise InvalidApiKey from err
         if "404" in str(err):
             raise InvalidStopId from err
         raise CannotConnect from err
-    except Exception as err:
-        _LOGGER.exception("Unexpected exception during validation")
-        raise UnknownError from err
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -83,37 +86,47 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 1: Get API Key."""
+        """Step 1: Get and Verify API Key immediately."""
+        errors = {}
         if user_input is not None:
-            self._api_key = user_input[CONF_API_KEY]
-            return await self.async_step_stop()
+            try:
+                await validate_api_key(self.hass, user_input[CONF_API_KEY])
+                self._api_key = user_input[CONF_API_KEY]
+                return await self.async_step_stop()
+            except InvalidApiKey:
+                errors["base"] = ERROR_API_KEY_INVALID
+            except CannotConnect:
+                errors["base"] = ERROR_CONNECTION
+            except Exception:
+                errors["base"] = ERROR_UNKNOWN
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({vol.Required(CONF_API_KEY): str}),
+            errors=errors,
             description_placeholders={
-                "project_link": "https://www.trafiklab.se/my-account/projects/",
-                "realtime_api_link": "https://www.trafiklab.se/api/trafiklab-realtime-api/",
+                "project_link": PROJECT_LINK,
+                "realtime_api_link": REALTIME_API_LINK,
             },
         )
 
     async def async_step_stop(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 2: Get Stop ID and Validate."""
+        """Step 2: Get and Verify Stop ID."""
         errors = {}
         if user_input is not None:
-            self._stop_id = user_input[CONF_STOP_ID]
             try:
-                await validate_api_key_and_stop(self.hass, self._api_key, self._stop_id)
+                await validate_stop_id(
+                    self.hass, self._api_key, user_input[CONF_STOP_ID]
+                )
+                self._stop_id = user_input[CONF_STOP_ID]
                 return await self.async_step_filters()
-            except InvalidApiKey:
-                errors["base"] = ERROR_API_KEY_INVALID
             except InvalidStopId:
                 errors[CONF_STOP_ID] = ERROR_STOP_NOT_FOUND
             except CannotConnect:
                 errors["base"] = ERROR_CONNECTION
-            except UnknownError:
+            except Exception:
                 errors["base"] = ERROR_UNKNOWN
 
         return self.async_show_form(
@@ -121,14 +134,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({vol.Required(CONF_STOP_ID): str}),
             errors=errors,
             description_placeholders={
-                "stop_lookup_link": "https://www.trafiklab.se/api/gtfs-sverige-2/stop-lookup/"
+                "stop_lookup_link": STOP_LOOKUP_LINK,
             },
         )
 
     async def async_step_filters(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 3: Set Line and Direction filters."""
+        """Step 3: Set Filters."""
         if user_input is not None:
             self._line_filter = user_input.get(CONF_LINE_FILTER, "")
             self._direction_filter = user_input.get(CONF_DIRECTION_FILTER, "")
@@ -138,7 +151,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="filters",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_LINE_FILTER): str,
+                    vol.Optional(CONF_LINE_FILTER, default=""): str,
                     vol.Optional(CONF_DIRECTION_FILTER, default=""): str,
                 }
             ),
@@ -147,7 +160,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_time_windows(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 4: Finalize with time windows."""
+        """Step 4: Finalize."""
         if user_input is not None:
             unique_id = f"{self._stop_id}_{self._line_filter}"
             await self.async_set_unique_id(unique_id)
@@ -175,6 +188,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle reconfiguration."""
+        return await self.async_step_user()
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -185,7 +204,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
-    """Handle options updates."""
+    """Handle options updates (Filters and Windows)."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -196,7 +215,6 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             user_input[CONF_TIME_WINDOWS] = (
                 [w.strip() for w in raw_windows.split(",")] if raw_windows else []
             )
-
             return self.async_create_entry(title="", data=user_input)
 
         current_windows = self.config_entry.options.get(CONF_TIME_WINDOWS, [])
@@ -207,9 +225,9 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             data_schema=self.add_suggested_values_to_schema(
                 vol.Schema(
                     {
-                        vol.Required(CONF_LINE_FILTER): str,
-                        vol.Optional(CONF_DIRECTION_FILTER): str,
-                        vol.Optional(CONF_TIME_WINDOWS): str,
+                        vol.Optional(CONF_LINE_FILTER, default=""): str,
+                        vol.Optional(CONF_DIRECTION_FILTER, default=""): str,
+                        vol.Optional(CONF_TIME_WINDOWS, default=""): str,
                     }
                 ),
                 {**self.config_entry.options, CONF_TIME_WINDOWS: windows_str},

@@ -17,7 +17,7 @@
       },
       "filters": {
         "title": "Filters",
-        "description": "Configure line and direction filters.",
+        "description": "Configure line and direction filters. Leave blank to show all departures.",
         "data": {
           "line_filter": "Line Filter",
           "direction_filter": "Direction Filter"
@@ -25,7 +25,7 @@
       },
       "time_windows": {
         "title": "Time Windows",
-        "description": "Optional polling windows (e.g. 06:00-10:00, 16:00-22:00).",
+        "description": "Optional polling windows (e.g., 06:00-10:00, 16:00-22:00).",
         "data": {
           "time_windows": "Time Windows"
         }
@@ -55,11 +55,11 @@
   },
   "entity": {
     "sensor": {
-      "departure_1": { "name": "Next Departure" },
-      "departure_2": { "name": "Second Departure" },
-      "departure_3": { "name": "Third Departure" },
-      "departure_4": { "name": "Fourth Departure" },
-      "departure_5": { "name": "Fifth Departure" }
+      "departure_1": { "name": "1. Next Departure" },
+      "departure_2": { "name": "2. Second Departure" },
+      "departure_3": { "name": "3. Third Departure" },
+      "departure_4": { "name": "4. Fourth Departure" },
+      "departure_5": { "name": "5. Fifth Departure" }
     }
   }
 }

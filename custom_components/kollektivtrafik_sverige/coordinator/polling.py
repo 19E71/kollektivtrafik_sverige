@@ -30,7 +30,6 @@ class QuotaTracker:
 
     def __init__(self) -> None:
         """Initialize tracker."""
-        # Using a deque for slightly better performance on high-frequency rotations
         self._calls: deque[datetime] = deque()
 
     def record_call(self, now: datetime | None = None) -> None:
@@ -64,13 +63,10 @@ class QuotaTracker:
         day_calls = self.calls_last_day(curr_now)
         hour_calls = self.calls_last_hour(curr_now)
 
-        # Critical Overload
         if day_calls > MAX_CALLS_PER_DAY:
             return 2.0
         if hour_calls > MAX_CALLS_PER_HOUR:
             return 1.5
-
-        # Under Budget (Safe to speed up)
         if day_calls < MAX_CALLS_PER_DAY * 0.5:
             return 0.8
 
@@ -97,7 +93,7 @@ def _parse_window(window: str) -> tuple[time, time] | None:
         sh, sm = map(int, start_str.split(":"))
         eh, em = map(int, end_str.split(":"))
         return time(sh, sm), time(eh, em)
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, IndexError):
         return None
 
 
@@ -111,10 +107,8 @@ def _in_time_window(now: datetime, windows: list[str]) -> bool:
         parsed = _parse_window(w)
         if parsed:
             start, end = parsed
-            # Handle standard window
             if start <= now_t <= end:
                 return True
-            # Handle overnight window (e.g., 22:00-04:00)
             if start > end and (now_t >= start or now_t <= end):
                 return True
     return False
@@ -136,23 +130,21 @@ def calculate_next_interval(
 
     # 2. Get Next Departure
     exposed = queue.exposed()
-    # Find the first non-None departure
     next_dep = next((d for d in exposed if d is not None), None)
 
     if next_dep is None:
         return int(MAX_INTERVAL * throttle)
 
-    # 3. Calculate Minutes
-    minutes = next_dep.get("minutes")
+    # 3. FIX: Access attributes via dot notation (NormalizedDeparture is a dataclass)
+    minutes = next_dep.minutes
 
-    # Fallback if minutes missing but timestamp exists
-    if minutes is None and (ts := next_dep.get("expected_time")):
-        dt = dt_util.parse_datetime(ts)
+    # Fallback if minutes missing
+    if minutes is None and next_dep.expected_time:
+        dt = dt_util.parse_datetime(next_dep.expected_time)
         if dt:
             # Ensure DT is aware for comparison
             if dt.tzinfo is None:
-                dt = dt_util.as_utc(dt)
-
+                dt = dt_util.as_local(dt)
             delta = dt - curr_now
             minutes = max(0, int(delta.total_seconds() // 60))
 
@@ -161,10 +153,9 @@ def calculate_next_interval(
         return int(MAX_INTERVAL * throttle)
 
     # 5. Density Throttling
-    # If we already have a full board, we don't need to refresh as aggressively
     base = (
         HIGH_DENSITY_MIN_INTERVAL
-        if sum(1 for d in exposed if d is not None) >= 5
+        if len([d for d in exposed if d is not None]) >= 5
         else MIN_INTERVAL
     )
 

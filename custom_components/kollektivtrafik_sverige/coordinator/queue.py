@@ -11,7 +11,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
-from .parser import NormalizedDeparture
+from .parser import NormalizedDeparture, _parse_iso
 
 MAX_BUFFER = 10
 EXPOSED_COUNT = 5
@@ -30,11 +30,7 @@ class DepartureQueue:
         self._buffer = departures[:MAX_BUFFER]
 
     def exposed(self) -> list[dict[str, Any] | None]:
-        """Return the 5 departures exposed to Home Assistant.
-
-        Output format is a list of dicts ready for sensors.
-        Empty slots are represented as None.
-        """
+        """Return the 5 departures exposed to Home Assistant."""
         now = dt_util.now()
         exposed: list[dict[str, Any] | None] = []
 
@@ -51,11 +47,12 @@ class DepartureQueue:
         """Remove departures that are already in the past."""
         curr_now = now or dt_util.now()
 
-        # Keep departures where the expected time is now or in the future
+        # Keep departures that are within the 60-second grace period or in the future
         self._buffer = [
             dep
             for dep in self._buffer
-            if (dt := _parse_iso(dep.expected_time)) and dt >= curr_now
+            if (dt := _parse_iso(dep.expected_time))
+            and (dt - curr_now).total_seconds() >= -60
         ][:MAX_BUFFER]
 
     def _format_departure(
@@ -64,24 +61,30 @@ class DepartureQueue:
         """Convert a NormalizedDeparture into a dict for sensors."""
         dt = _parse_iso(dep.expected_time)
 
-        # Recalculate minutes relative to 'now' to ensure accuracy between polls
+        # Default to the value provided by the parser
         minutes = dep.minutes
+
+        # Recalculate minutes relative to 'now' to ensure accuracy between polls
         if dt:
-            # Ensure we are comparing aware datetimes
             if dt.tzinfo is None:
-                dt = dt_util.as_utc(dt)
+                dt = dt_util.as_local(dt)
 
             delta = dt - now
-            calc_minutes = int(delta.total_seconds() // 60)
-            # Use the more conservative/accurate value
-            minutes = max(0, calc_minutes)
+            total_seconds = int(delta.total_seconds())
 
-        # Logic: If > 60 minutes away, we prefer showing the clock time
+            # Align with Parser logic: -60s to 59s is "Now" (0 min)
+            if -60 <= total_seconds < 60:
+                minutes = 0
+            else:
+                minutes = total_seconds // 60
+
+        # Logic: If > 60 minutes away, we show the clock time (timestamp)
+        # Otherwise, we show the minutes remaining
         if minutes is not None and minutes > TIMESTAMP_THRESHOLD_MINUTES:
             minutes_display = None
             timestamp_display = dep.expected_time
         else:
-            minutes_display = minutes
+            minutes_display = max(0, minutes) if minutes is not None else None
             timestamp_display = None
 
         return {
@@ -95,15 +98,3 @@ class DepartureQueue:
             "transport_mode": dep.transport_mode,
             "deviations": dep.deviations,
         }
-
-
-# ----------------------------------------------------------------------
-# Utility functions
-# ----------------------------------------------------------------------
-
-
-def _parse_iso(dt_str: str | None) -> datetime | None:
-    """Internal ISO parser using HA utilities."""
-    if not dt_str:
-        return None
-    return dt_util.parse_datetime(dt_str)

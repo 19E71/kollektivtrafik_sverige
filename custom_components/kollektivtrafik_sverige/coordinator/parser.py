@@ -42,13 +42,18 @@ def _parse_iso(dt_str: Any) -> datetime | None:
 
 def _minutes_until(target: datetime, now: datetime) -> int | None:
     """Return whole minutes from now until target, or None if past."""
-    # Ensure both are aware or both are naive (HA uses aware)
     delta = target - now
     total_seconds = int(delta.total_seconds())
 
-    # We allow 0 minutes, but negative means the bus is gone
-    if total_seconds < 0:
+    # If the departure is more than 60 seconds in the past, consider it 'gone'
+    if total_seconds < -60:
         return None
+
+    # If the departure is within 60 seconds (past or future), it's "Now" (0 min)
+    if -60 <= total_seconds < 60:
+        return 0
+
+    # Otherwise, return the standard floor division for minutes
     return total_seconds // 60
 
 
@@ -65,7 +70,7 @@ def parse_departures_response(
     if now is None:
         now = dt_util.now()
 
-    # Handle different possible API response structures
+    # Handle different possible API response structures (Trafiklab variants)
     departures_raw = raw.get("departures") or raw.get("Departures") or []
     if isinstance(departures_raw, dict):
         departures_raw = [departures_raw]
@@ -116,6 +121,10 @@ def parse_departures_response(
 
         minutes = _minutes_until(effective_dt, now)
 
+        # If the departure is outside our grace period, skip it
+        if minutes is None:
+            continue
+
         transport_mode = (
             _safe_str(
                 item.get("transport_mode")
@@ -147,6 +156,6 @@ def parse_departures_response(
             )
         )
 
-    # Sort by expected_time (string ISO format sorts chronologically)
+    # Sort by expected_time (ISO string format sorts chronologically)
     normalized.sort(key=lambda d: d.expected_time)
     return normalized

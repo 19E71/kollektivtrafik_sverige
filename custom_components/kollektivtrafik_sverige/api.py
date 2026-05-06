@@ -44,7 +44,6 @@ class KollektivtrafikApiClient:
     def session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None:
-            # Note: We don't set a total timeout here because we apply it per request
             self._session = aiohttp.ClientSession()
             self._close_session = True
         return self._session
@@ -68,13 +67,23 @@ class KollektivtrafikApiClient:
         time_offset: str | None = None,
     ) -> dict[str, Any]:
         """Fetch realtime departures for a stop."""
-
-        # Using yarl for cleaner URL construction
         base = URL(API_BASE_URL + DEPARTURES_ENDPOINT)
         url = base / stop_id
         if time_offset:
             url = url / time_offset
 
+        return await self._async_request(url)
+
+    async def search_stops(self, search_value: str) -> list[dict[str, Any]]:
+        """Search for stops by name using the Trafiklab search endpoint."""
+        # Using the specific search URL structure you requested
+        url = URL(f"https://realtime-api.trafiklab.se/v1/stops/name/{search_value}")
+
+        data = await self._async_request(url)
+        return data.get("stops", [])
+
+    async def _async_request(self, url: URL) -> dict[str, Any]:
+        """Make a request to the API with unified error handling."""
         params = {"key": self.api_key}
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
@@ -87,16 +96,14 @@ class KollektivtrafikApiClient:
                         return await response.json()
                     except (aiohttp.ContentTypeError, ValueError) as err:
                         raise KollektivtrafikApiError(
-                            f"Invalid JSON response from API: {err}"
+                            f"Invalid JSON response: {err}"
                         ) from err
 
-                # Handle specific error codes used by our config_flow
                 if response.status == 403:
                     raise KollektivtrafikApiError("403: Invalid API key")
                 if response.status == 404:
-                    raise KollektivtrafikApiError("404: Stop ID not found")
+                    raise KollektivtrafikApiError("404: Endpoint or Stop not found")
 
-                # Catch-all for other HTTP errors (500, 429, etc)
                 response.raise_for_status()
                 return await response.json()
 
@@ -107,8 +114,8 @@ class KollektivtrafikApiClient:
                 f"Realtime API connection error: {err}"
             ) from err
 
-    async def validate_api_key(self, test_stop_id: str = "740098000") -> bool:
-        """Validate API key by making a test request."""
+    async def validate_api_key(self, test_stop_id: str = "740000001") -> bool:
+        """Validate API key by making a test request to Stockholm C."""
         try:
             await self.get_departures(test_stop_id)
             return True

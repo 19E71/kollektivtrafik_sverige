@@ -27,6 +27,7 @@ from ..const import (
     CONF_LINE_FILTER,
     CONF_DIRECTION_FILTER,
     CONF_TIME_WINDOWS,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,20 +37,12 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Main orchestrator for Trafiklab realtime departures."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the coordinator using the config entry."""
+        """Initialize the coordinator."""
+        self.entry = entry
 
-        # 1. Extract data from entry (Data is in .data and .options)
-        api_key = entry.data[CONF_API_KEY]
-        self.stop_id = entry.data[CONF_STOP_ID]
-
-        # Options can change via Options Flow, so we grab them here
-        self.line_filter = entry.options.get(CONF_LINE_FILTER, "")
-        self.direction_filter = entry.options.get(CONF_DIRECTION_FILTER)
-        self.time_windows = entry.options.get(CONF_TIME_WINDOWS, [])
-
-        # 2. Initialize internal tools
+        # Initialize internal tools
         self.api = KollektivtrafikApiClient(
-            api_key, session=async_get_clientsession(hass)
+            entry.data[CONF_API_KEY], session=async_get_clientsession(hass)
         )
         self.queue = DepartureQueue()
         self.quota = QuotaTracker()
@@ -57,10 +50,33 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Kollektivtrafik {self.stop_id}",
-            # Start with a safe default, polling logic will override this immediately
+            # Use DOMAIN here to provide context in logs and satisfy linting
+            name=f"{DOMAIN}_{entry.data[CONF_STOP_ID]}",
             update_interval=timedelta(seconds=60),
         )
+
+        # Listen for option updates (e.g. changing filters in UI)
+        entry.async_on_unload(entry.add_update_listener(self._async_update_listener))
+
+    @property
+    def stop_id(self) -> str:
+        """Return stop ID from entry data."""
+        return self.entry.data[CONF_STOP_ID]
+
+    @property
+    def line_filter(self) -> str:
+        """Return line filter from entry options."""
+        return self.entry.options.get(CONF_LINE_FILTER, "")
+
+    @property
+    def direction_filter(self) -> str | None:
+        """Return direction filter from entry options."""
+        return self.entry.options.get(CONF_DIRECTION_FILTER)
+
+    @property
+    def time_windows(self) -> list[str]:
+        """Return time windows from entry options."""
+        return self.entry.options.get(CONF_TIME_WINDOWS, [])
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch, parse, filter, queue, and compute next interval."""
@@ -70,30 +86,28 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             raw = await self.api.get_departures(self.stop_id)
         except Exception as err:
-            # If the API fails, we don't clear the queue!
-            # We keep showing the old data until it's pruned by time.
+            # We keep the old data in the queue until it expires naturally
             _LOGGER.error("Error fetching departures for %s: %s", self.stop_id, err)
             raise UpdateFailed(f"API error: {err}") from err
 
-        # Record quota usage
+        # Record quota usage for the polling logic
         self.quota.record_call()
 
-        # 2. Parse normalized departures
+        # 2. Parse raw response into normalized departure objects
         parsed = parse_departures_response(raw, now=now)
 
-        # 3. Apply filters
+        # 3. Apply user-defined filters
         filtered = filter_departures(
             parsed,
             line_filter=self.line_filter,
             direction_filter=self.direction_filter,
         )
 
-        # 4. Update the rolling buffer
-        # We prune first so the 'exposed' list doesn't show ghost buses
+        # 4. Update the internal rolling buffer
         self.queue.prune_expired(now)
         self.queue.update(filtered)
 
-        # 5. Calculate next polling interval based on our custom logic
+        # 5. Calculate next polling interval based on traffic density and quotas
         interval_sec = calculate_next_interval(
             queue=self.queue,
             time_windows=self.time_windows,
@@ -101,12 +115,21 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             now=now,
         )
 
-        # Dynamically adjust the sleep timer for the next poll
+        # Dynamically adjust the coordinator timer
         self.update_interval = timedelta(seconds=interval_sec)
-        _LOGGER.debug("Next poll for %s in %s seconds", self.stop_id, interval_sec)
+        _LOGGER.debug(
+            "Next poll for %s scheduled in %s seconds", self.stop_id, interval_sec
+        )
 
-        # 6. Return the data dictionary that sensors will consume
+        # 6. Return data for sensors
         return {
             "departures": self.queue.exposed(),
             "next_poll_seconds": interval_sec,
         }
+
+    async def _async_update_listener(
+        self, hass: HomeAssistant, entry: ConfigEntry
+    ) -> None:
+        """Handle options update by triggering an immediate refresh."""
+        _LOGGER.debug("Configuration updated, refreshing integration")
+        await self.async_request_refresh()
