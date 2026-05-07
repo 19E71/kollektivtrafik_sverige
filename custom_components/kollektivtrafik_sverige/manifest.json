@@ -1,15 +1,13 @@
 {
   "domain": "kollektivtrafik_sverige",
   "name": "Kollektivtrafik Sverige",
-  "version": "1.0.0",
-  "integration_type": "service",
-  
-  "documentation": "https://github.com/19e71/kollektivtrafik_sverige",
-  "issue_tracker": "https://github.com/19e71/kollektivtrafik_sverige/issues",
   "codeowners": ["@19e71"],
-  
-  "iot_class": "cloud_polling",
   "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/19e71/kollektivtrafik_sverige",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/19e71/kollektivtrafik_sverige/issues",
   "requirements": [],
-  "dependencies": []
+  "version": "1.0.0"
 }
