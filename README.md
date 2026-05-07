@@ -33,7 +33,10 @@
 
 ## 📦 Installation
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=19E71&repository=https%3A%2F%2Fgithub.com%2F19E71%2Fkollektivtrafik_sverige)
+
 ### HACS
+
 1. Open **HACS → Integrations**.
 2. Click the three dots in the top right and select **Custom Repositories**.
 3. Add `https://github.com/19E71/Kollektivtrafik_Sverige` with category **Integration**.
@@ -53,6 +56,7 @@
 ## 🆔 Finding Your Stop ID
 
 Use the official [Stop Lookup tool](https://www.trafiklab.se/api/our-apis/trafiklab-realtime-apis/stop-lookup):
+
 1. Enter a stop name (e.g., “Sundsvall”, “Stockholm”).
 2. Enter your API key and click **Try it out**.
 3. Open the generated URL and copy the **`stop_group -> id`** value (e.g., `"740098000"`).
@@ -67,6 +71,7 @@ Use the official [Stop Lookup tool](https://www.trafiklab.se/api/our-apis/trafik
 4. Configure optional filters and **Time Windows**.
 
 The integration creates **five sensors**:
+
 - `sensor.kollektivtrafik_sverige_departure_1` ... to `_5`
 
 ---
@@ -76,6 +81,7 @@ The integration creates **five sensors**:
 **State:** Minutes until departure (integer).
 
 **Attributes:**
+
 - `line`, `destination`, `direction`
 - `scheduled_time`, `expected_time`
 - `real_time` (boolean)
@@ -84,13 +90,16 @@ The integration creates **five sensors**:
 ---
 
 ## 🏗️ Architecture Overview
+
 This integration is built for robustness and minimal API usage:
+
 1. **Polling Engine:** Prevents overlapping requests.
 2. **Request Queue:** Protects your Trafiklab quota.
 3. **Coordinator:** Shares one API call across all five sensors.
 4. **Filters:** Efficiently processes lines, directions, and time windows.
 
 ### 📉 API Quota Considerations
+
 - One API call per update interval.
 - Time windows reduce unnecessary polling during off-hours.
 - **Recommended interval:** 300 seconds (5 minutes).
@@ -107,5 +116,6 @@ This integration is built for robustness and minimal API usage:
 ---
 
 ## 📄 License
-This project is licensed under the **Mozilla Public License 2.0 (MPL‑2.0)**. 
+
+  This project is licensed under the **Mozilla Public License 2.0 (MPL‑2.0)**.
 See the `LICENSE` file for details.

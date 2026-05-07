@@ -15,3 +15,7 @@ KollektivtrafikSverigeCoordinator, including:
 The main coordinator imports these modules to keep the codebase clean,
 maintainable, and easy to extend.
 """
+
+from .coordinator import KollektivtrafikSverigeCoordinator
+
+__all__ = ["KollektivtrafikSverigeCoordinator"]
