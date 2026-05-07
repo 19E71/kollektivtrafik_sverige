@@ -200,7 +200,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> OptionsFlowHandler:
         """Return options flow."""
-        return OptionsFlowHandler(config_entry)
+        # MODERNISED: We no longer pass config_entry to the constructor
+        return OptionsFlowHandler()
 
 
 class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
@@ -217,6 +218,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             )
             return self.async_create_entry(title="", data=user_input)
 
+        # MODERNISED: self.config_entry is automatically available on the base class
         current_windows = self.config_entry.options.get(CONF_TIME_WINDOWS, [])
         windows_str = ",".join(current_windows)
 
