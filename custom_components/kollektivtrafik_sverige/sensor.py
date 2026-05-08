@@ -91,7 +91,7 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
             return None
 
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=dt_util.UTC)
+            parsed = dt_util.as_local(parsed)
         return parsed
 
     @property
