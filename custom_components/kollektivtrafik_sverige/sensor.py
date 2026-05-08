@@ -13,6 +13,8 @@ from homeassistant.components.sensor import (
     SensorStateClass,
     SensorDeviceClass,
 )
+
+# Note: Ensure these imports match your actual coordinator name
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -74,16 +76,17 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
         if not data:
             return None
 
-        # Logic: If we have minutes, use them.
-        # If we only have a timestamp (bus is > 60m away), use that.
-        if (mins := data.get("minutes")) is not None:
+        # Logic: If we have minutes, use them as the primary state.
+        # If we only have a timestamp (bus is far away), use that.
+        mins = data.get("minutes")
+        if mins is not None:
             return mins
 
         return data.get("timestamp")
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        """Dynamically set unit. No unit for timestamps."""
+        """Units are 'min' only when showing minutes."""
         data = self._get_departure()
         if data and data.get("minutes") is not None:
             return "min"
@@ -91,7 +94,7 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def state_class(self) -> SensorStateClass | None:
-        """Only use measurement class for minutes, not timestamps."""
+        """Measurement class applies to minutes, but NOT to timestamps."""
         data = self._get_departure()
         if data and data.get("minutes") is not None:
             return SensorStateClass.MEASUREMENT
@@ -99,10 +102,19 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_class(self) -> SensorDeviceClass | None:
-        """Set device class to timestamp if the state is a timestamp."""
+        """Set to TIMESTAMP only if we are actually displaying a timestamp string."""
         data = self._get_departure()
-        if data and data.get("timestamp") is not None:
+        if not data:
+            return None
+
+        # If we are displaying 'minutes' (an int), device_class MUST be None.
+        if data.get("minutes") is not None:
+            return None
+
+        # If we are falling back to the timestamp string, use TIMESTAMP class.
+        if data.get("timestamp") is not None:
             return SensorDeviceClass.TIMESTAMP
+
         return None
 
     @property

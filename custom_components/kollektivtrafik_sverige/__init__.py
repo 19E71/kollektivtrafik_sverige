@@ -13,7 +13,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KollektivtrafikApiClient
 from .const import DOMAIN, CONF_API_KEY
-from .coordinator import KollektivtrafikCoordinator
+
+# FIXED: Added "Sverige" to match your sub-package export
+from .coordinator import KollektivtrafikSverigeCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -21,27 +23,21 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kollektivtrafik Sverige from a config entry."""
 
-    # 1. Initialize the API Client
-    # We use the session managed by Home Assistant
     session = async_get_clientsession(hass)
     client = KollektivtrafikApiClient(
         api_key=entry.data[CONF_API_KEY],
         session=session,
     )
 
-    # 2. Initialize the coordinator with the client and entry
-    coordinator = KollektivtrafikCoordinator(hass, client, entry)
+    # FIXED: Use the correct class name here
+    coordinator = KollektivtrafikSverigeCoordinator(hass, client, entry)
 
-    # 3. Perform initial data fetch
     await coordinator.async_config_entry_first_refresh()
 
-    # 4. Store the coordinator
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # 5. Listen for option updates (Filters/Time Windows)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # 6. Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
