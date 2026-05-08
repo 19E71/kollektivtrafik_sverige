@@ -30,13 +30,16 @@ CONF_DIRECTION_FILTER: Final = "direction_filter"
 CONF_TIME_WINDOWS: Final = "time_windows"
 
 # ---------------------------------------------------------------------------
-# API endpoints (Trafiklab Realtime API)
+# API endpoints (Trafiklab Unified Realtime API v1)
 # ---------------------------------------------------------------------------
 
 API_BASE_URL: Final = "https://realtime-api.trafiklab.se/v1"
-DEPARTURES_ENDPOINT: Final = "/departures"
 
-# UI Links matching your verified README
+# REMOVED the leading slash so yarl doesn't double-slash the URL
+DEPARTURES_ENDPOINT: Final = "departures"
+STOPS_ENDPOINT: Final = "stops"
+
+# UI Links for the configuration flow documentation
 PROJECT_LINK: Final = "https://developer.trafiklab.se/project/list"
 REALTIME_API_LINK: Final = (
     "https://www.trafiklab.se/api/our-apis/trafiklab-realtime-apis"
@@ -54,6 +57,7 @@ ATTR_DESTINATION: Final = "destination"
 ATTR_DIRECTION: Final = "direction"
 ATTR_EXPECTED_TIME: Final = "expected_time"
 ATTR_SCHEDULED_TIME: Final = "scheduled_time"
+ATTR_MINUTES: Final = "minutes"
 ATTR_TIMESTAMP: Final = "timestamp"
 ATTR_TRANSPORT_MODE: Final = "transport_mode"
 ATTR_DEVIATIONS: Final = "deviations"

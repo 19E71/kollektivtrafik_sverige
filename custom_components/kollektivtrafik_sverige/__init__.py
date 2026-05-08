@@ -9,9 +9,11 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
-from .coordinator import KollektivtrafikSverigeCoordinator
+from .api import KollektivtrafikApiClient
+from .const import DOMAIN, CONF_API_KEY
+from .coordinator import KollektivtrafikCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -19,20 +21,27 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kollektivtrafik Sverige from a config entry."""
 
-    # 1. Initialize the coordinator
-    coordinator = KollektivtrafikSverigeCoordinator(hass, entry)
+    # 1. Initialize the API Client
+    # We use the session managed by Home Assistant
+    session = async_get_clientsession(hass)
+    client = KollektivtrafikApiClient(
+        api_key=entry.data[CONF_API_KEY],
+        session=session,
+    )
 
-    # 2. Perform initial data fetch
+    # 2. Initialize the coordinator with the client and entry
+    coordinator = KollektivtrafikCoordinator(hass, client, entry)
+
+    # 3. Perform initial data fetch
     await coordinator.async_config_entry_first_refresh()
 
-    # 3. Store the coordinator
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    # 4. Store the coordinator
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # 4. Listen for option updates
+    # 5. Listen for option updates (Filters/Time Windows)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # 5. Set up platforms
+    # 6. Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -40,12 +49,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # 1. Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        # 2. Cleanup hass.data
-        # We DO NOT close the session here because it is managed by HA core.
         hass.data[DOMAIN].pop(entry.entry_id)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)

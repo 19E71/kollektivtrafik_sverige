@@ -80,13 +80,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize flow."""
         self._api_key: str | None = None
         self._stop_id: str | None = None
-        self._line_filter: str = ""
-        self._direction_filter: str = ""
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 1: Get and Verify API Key immediately."""
+        """Step 1: Get and Verify API Key."""
         errors = {}
         if user_input is not None:
             try:
@@ -98,6 +96,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except CannotConnect:
                 errors["base"] = ERROR_CONNECTION
             except Exception:
+                _LOGGER.exception("Unexpected error during API key validation")
                 errors["base"] = ERROR_UNKNOWN
 
         return self.async_show_form(
@@ -127,25 +126,42 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except CannotConnect:
                 errors["base"] = ERROR_CONNECTION
             except Exception:
+                _LOGGER.exception("Unexpected error during Stop ID validation")
                 errors["base"] = ERROR_UNKNOWN
 
         return self.async_show_form(
             step_id="stop",
             data_schema=vol.Schema({vol.Required(CONF_STOP_ID): str}),
             errors=errors,
-            description_placeholders={
-                "stop_lookup_link": STOP_LOOKUP_LINK,
-            },
+            description_placeholders={"stop_lookup_link": STOP_LOOKUP_LINK},
         )
 
     async def async_step_filters(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 3: Set Filters."""
+        """Step 3: Set Filters (Can be left blank for testing)."""
         if user_input is not None:
-            self._line_filter = user_input.get(CONF_LINE_FILTER, "")
-            self._direction_filter = user_input.get(CONF_DIRECTION_FILTER, "")
-            return await self.async_step_time_windows()
+            line_filter = user_input.get(CONF_LINE_FILTER, "")
+            direction_filter = user_input.get(CONF_DIRECTION_FILTER, "")
+
+            # Use a robust Unique ID to prevent collisions
+            await self.async_set_unique_id(
+                f"{self._stop_id}_{line_filter}_{direction_filter}"
+            )
+            self._abort_if_unique_id_configured()
+
+            return self.async_create_entry(
+                title=f"Stop {self._stop_id}",
+                data={
+                    CONF_API_KEY: self._api_key,
+                    CONF_STOP_ID: self._stop_id,
+                },
+                options={
+                    CONF_LINE_FILTER: line_filter,
+                    CONF_DIRECTION_FILTER: direction_filter,
+                    CONF_TIME_WINDOWS: [],
+                },
+            )
 
         return self.async_show_form(
             step_id="filters",
@@ -157,81 +173,37 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
-    async def async_step_time_windows(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Step 4: Finalize."""
-        if user_input is not None:
-            unique_id = f"{self._stop_id}_{self._line_filter}"
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
-
-            raw_windows = user_input.get(CONF_TIME_WINDOWS, "")
-            windows = [w.strip() for w in raw_windows.split(",")] if raw_windows else []
-
-            return self.async_create_entry(
-                title=f"Stop {self._stop_id} (Line {self._line_filter})",
-                data={CONF_API_KEY: self._api_key, CONF_STOP_ID: self._stop_id},
-                options={
-                    CONF_LINE_FILTER: self._line_filter,
-                    CONF_DIRECTION_FILTER: self._direction_filter,
-                    CONF_TIME_WINDOWS: windows,
-                },
-            )
-
-        return self.async_show_form(
-            step_id="time_windows",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(CONF_TIME_WINDOWS, default=""): str,
-                }
-            ),
-        )
-
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle reconfiguration."""
-        return await self.async_step_user()
-
     @staticmethod
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> OptionsFlowHandler:
-        """Return options flow."""
-        # MODERNISED: We no longer pass config_entry to the constructor
         return OptionsFlowHandler()
 
 
 class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
-    """Handle options updates (Filters and Windows)."""
+    """Handle options updates."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
         if user_input is not None:
-            raw_windows = user_input.get(CONF_TIME_WINDOWS, "")
-            user_input[CONF_TIME_WINDOWS] = (
-                [w.strip() for w in raw_windows.split(",")] if raw_windows else []
-            )
             return self.async_create_entry(title="", data=user_input)
-
-        # MODERNISED: self.config_entry is automatically available on the base class
-        current_windows = self.config_entry.options.get(CONF_TIME_WINDOWS, [])
-        windows_str = ",".join(current_windows)
 
         return self.async_show_form(
             step_id="init",
-            data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(
-                    {
-                        vol.Optional(CONF_LINE_FILTER, default=""): str,
-                        vol.Optional(CONF_DIRECTION_FILTER, default=""): str,
-                        vol.Optional(CONF_TIME_WINDOWS, default=""): str,
-                    }
-                ),
-                {**self.config_entry.options, CONF_TIME_WINDOWS: windows_str},
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_LINE_FILTER,
+                        default=self.config_entry.options.get(CONF_LINE_FILTER, ""),
+                    ): str,
+                    vol.Optional(
+                        CONF_DIRECTION_FILTER,
+                        default=self.config_entry.options.get(
+                            CONF_DIRECTION_FILTER, ""
+                        ),
+                    ): str,
+                }
             ),
         )

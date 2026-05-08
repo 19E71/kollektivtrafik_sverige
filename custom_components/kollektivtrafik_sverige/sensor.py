@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
+    SensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -25,6 +26,8 @@ from .const import (
     ATTR_DIRECTION,
     ATTR_EXPECTED_TIME,
     ATTR_SCHEDULED_TIME,
+    ATTR_MINUTES,
+    ATTR_TIMESTAMP,
     ATTR_TRANSPORT_MODE,
     ATTR_DEVIATIONS,
 )
@@ -47,9 +50,6 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:bus-clock"
-    # Keeping state class as measurement for the 'min' unit
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "min"
 
     def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
         """Initialize the sensor."""
@@ -69,21 +69,41 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | str | None:
-        """Return minutes until departure."""
+        """Return the sensor state (minutes or timestamp)."""
         data = self._get_departure()
         if not data:
             return None
 
-        # Prefer minutes (int) for the state.
-        # If it's a timestamp string, we return it, but HA might
-        # complain about the 'min' unit. Best to return 0 if it's immediate.
-        val = data.get("minutes")
-        if val is not None:
-            return val
+        # Logic: If we have minutes, use them.
+        # If we only have a timestamp (bus is > 60m away), use that.
+        if (mins := data.get("minutes")) is not None:
+            return mins
 
-        # Fallback: if data is far away, we still return the minutes calculated by coordinator
-        # to keep the unit 'min' valid.
-        return data.get("minutes_calculated") or None
+        return data.get("timestamp")
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Dynamically set unit. No unit for timestamps."""
+        data = self._get_departure()
+        if data and data.get("minutes") is not None:
+            return "min"
+        return None
+
+    @property
+    def state_class(self) -> SensorStateClass | None:
+        """Only use measurement class for minutes, not timestamps."""
+        data = self._get_departure()
+        if data and data.get("minutes") is not None:
+            return SensorStateClass.MEASUREMENT
+        return None
+
+    @property
+    def device_class(self) -> SensorDeviceClass | None:
+        """Set device class to timestamp if the state is a timestamp."""
+        data = self._get_departure()
+        if data and data.get("timestamp") is not None:
+            return SensorDeviceClass.TIMESTAMP
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -98,6 +118,8 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
             ATTR_DIRECTION: data.get("direction"),
             ATTR_EXPECTED_TIME: data.get("expected_time"),
             ATTR_SCHEDULED_TIME: data.get("scheduled_time"),
+            ATTR_MINUTES: data.get("minutes"),
+            ATTR_TIMESTAMP: data.get("timestamp"),
             ATTR_TRANSPORT_MODE: data.get("transport_mode"),
             ATTR_DEVIATIONS: data.get("deviations", []),
         }
