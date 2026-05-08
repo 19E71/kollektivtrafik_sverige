@@ -83,29 +83,43 @@ def parse_departures_response(
         if not isinstance(item, dict):
             continue
 
-        line = _safe_str(
-            item.get("line") or item.get("LineNumber") or item.get("line_number")
-        )
-        destination = _safe_str(
-            item.get("destination")
-            or item.get("Destination")
-            or item.get("direction")
-            or item.get("Towards")
-        )
+        # Unified API returns line as an object: {"designation": "4", ...}
+        line_data = item.get("line")
+        if isinstance(line_data, dict):
+            line = _safe_str(line_data.get("designation"))
+        else:
+            line = _safe_str(
+                line_data or item.get("LineNumber") or item.get("line_number")
+            )
+
+        # Unified API returns destination as an object: {"name": "Gullmarsplan", ...}
+        dest_data = item.get("destination")
+        if isinstance(dest_data, dict):
+            destination = _safe_str(dest_data.get("name"))
+        else:
+            destination = _safe_str(
+                dest_data
+                or item.get("Destination")
+                or item.get("direction")
+                or item.get("Towards")
+            )
+
         direction = (
             _safe_str(item.get("direction") or item.get("Direction") or "") or None
         )
 
-        # Time mapping
+        # Time mapping - Added camelCase keys used by the Unified Realtime API
         expected_raw = (
-            item.get("expected_time")
+            item.get("expectedTime")
+            or item.get("expected_time")
             or item.get("ExpectedDateTime")
             or item.get("expected_datetime")
             or item.get("rtTime")
             or item.get("rtDateTime")
         )
         scheduled_raw = (
-            item.get("scheduled_time")
+            item.get("scheduledTime")
+            or item.get("scheduled_time")
             or item.get("AdvertisedTimeAtLocation")
             or item.get("time")
             or item.get("planned_datetime")
