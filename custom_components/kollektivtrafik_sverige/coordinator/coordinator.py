@@ -14,7 +14,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..api import KollektivtrafikApiClient
 from .parser import parse_departures_response
@@ -22,7 +21,6 @@ from .filters import filter_departures
 from .queue import DepartureQueue
 from .polling import calculate_next_interval, QuotaTracker
 from ..const import (
-    CONF_API_KEY,
     CONF_STOP_ID,
     CONF_LINE_FILTER,
     CONF_DIRECTION_FILTER,
@@ -36,15 +34,13 @@ _LOGGER = logging.getLogger(__name__)
 class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Main orchestrator for Trafiklab realtime departures."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, client: KollektivtrafikApiClient, entry: ConfigEntry
+    ) -> None:
         """Initialize the coordinator."""
         self.entry = entry
+        self.api = client  # Use the client passed from __init__.py
 
-        # Initialize internal tools
-        # session is managed by HA core via async_get_clientsession
-        self.api = KollektivtrafikApiClient(
-            entry.data[CONF_API_KEY], session=async_get_clientsession(hass)
-        )
         self.queue = DepartureQueue()
         self.quota = QuotaTracker()
 
@@ -55,9 +51,6 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Initial interval, will be dynamically adjusted by calculate_next_interval
             update_interval=timedelta(seconds=60),
         )
-
-        # Listen for option updates (e.g. changing filters in UI)
-        entry.async_on_unload(entry.add_update_listener(self._async_update_listener))
 
     @property
     def stop_id(self) -> str:
@@ -72,6 +65,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def direction_filter(self) -> str | None:
         """Return direction filter from entry options."""
+        # Use .get() to return None if it's not set
         return self.entry.options.get(CONF_DIRECTION_FILTER)
 
     @property
@@ -85,7 +79,6 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # 1. Fetch raw API data
         try:
-            # Matches the updated api.py signature for Unified API v1
             raw = await self.api.get_departures(self.stop_id)
         except Exception as err:
             _LOGGER.error("Error fetching departures for %s: %s", self.stop_id, err)
@@ -95,7 +88,6 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.quota.record_call(now)
 
         # 2. Parse raw response into normalized departure objects
-        # This uses the new parser that looks for 'realtime' and 'route' keys
         parsed = parse_departures_response(raw, now=now)
 
         # 3. Apply user-defined filters
@@ -132,10 +124,3 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "departures": self.queue.exposed(),
             "next_poll_seconds": interval_sec,
         }
-
-    async def _async_update_listener(
-        self, hass: HomeAssistant, entry: ConfigEntry
-    ) -> None:
-        """Handle options update by triggering an immediate refresh."""
-        _LOGGER.debug("Configuration updated, refreshing integration")
-        await self.async_request_refresh()
