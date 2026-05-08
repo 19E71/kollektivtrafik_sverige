@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -13,10 +14,9 @@ from homeassistant.components.sensor import (
     SensorStateClass,
     SensorDeviceClass,
 )
-
-# Note: Ensure these imports match your actual coordinator name
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -70,19 +70,29 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
         )
 
     @property
-    def native_value(self) -> int | str | None:
+    def native_value(self) -> int | datetime | None:
         """Return the sensor state (minutes or timestamp)."""
         data = self._get_departure()
         if not data:
             return None
 
         # Logic: If we have minutes, use them as the primary state.
-        # If we only have a timestamp (bus is far away), use that.
+        # If we only have a timestamp (bus is far away), use a datetime.
         mins = data.get("minutes")
         if mins is not None:
             return mins
 
-        return data.get("timestamp")
+        timestamp = data.get("timestamp")
+        if not timestamp:
+            return None
+
+        parsed = dt_util.parse_datetime(timestamp)
+        if parsed is None:
+            return None
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt_util.UTC)
+        return parsed
 
     @property
     def native_unit_of_measurement(self) -> str | None:
