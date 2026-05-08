@@ -13,10 +13,8 @@ from typing import Any
 import aiohttp
 from yarl import URL
 
-from .const import (
-    API_BASE_URL,
-    DEPARTURES_ENDPOINT,
-)
+# It is better to use the full base URL and append paths directly
+BASE_URL = "https://realtime-api.trafiklab.se/v1"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ class KollektivtrafikApiError(Exception):
 
 
 class KollektivtrafikApiClient:
-    """Client for the Trafiklab Realtime API."""
+    """Client for the Trafiklab Realtime API v1."""
 
     def __init__(
         self,
@@ -53,37 +51,28 @@ class KollektivtrafikApiClient:
         if self._close_session and self._session:
             await self._session.close()
 
-    async def __aenter__(self) -> KollektivtrafikApiClient:
-        """Async context manager enter."""
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        """Async context manager exit."""
-        await self.close()
-
     async def get_departures(
         self,
         stop_id: str,
-        time_offset: str | None = None,
     ) -> dict[str, Any]:
-        """Fetch realtime departures for a stop."""
-        base = URL(API_BASE_URL + DEPARTURES_ENDPOINT)
-        url = base / stop_id
-        if time_offset:
-            url = url / time_offset
+        """Fetch realtime departures for a stop.
 
+        Note: The Unified API v1 uses /departures/{stop_id}
+        """
+        # Build URL: https://realtime-api.trafiklab.se/v1/departures/{stop_id}
+        url = URL(BASE_URL) / "departures" / stop_id
         return await self._async_request(url)
 
     async def search_stops(self, search_value: str) -> list[dict[str, Any]]:
-        """Search for stops by name using the Trafiklab search endpoint."""
-        # Using the specific search URL structure you requested
-        url = URL(f"https://realtime-api.trafiklab.se/v1/stops/name/{search_value}")
-
+        """Search for stops by name."""
+        # Build URL: https://realtime-api.trafiklab.se/v1/stops/name/{search_value}
+        url = URL(BASE_URL) / "stops" / "name" / search_value
         data = await self._async_request(url)
         return data.get("stops", [])
 
     async def _async_request(self, url: URL) -> dict[str, Any]:
         """Make a request to the API with unified error handling."""
+        # The key is always passed as a query parameter
         params = {"key": self.api_key}
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
@@ -91,34 +80,33 @@ class KollektivtrafikApiClient:
             async with self.session.get(
                 url, params=params, timeout=timeout
             ) as response:
-                if response.status == 200:
-                    try:
-                        return await response.json()
-                    except (aiohttp.ContentTypeError, ValueError) as err:
-                        raise KollektivtrafikApiError(
-                            f"Invalid JSON response: {err}"
-                        ) from err
-
-                if response.status == 403:
-                    raise KollektivtrafikApiError("403: Invalid API key")
+                # Handle error status codes before parsing JSON
+                if response.status == 401 or response.status == 403:
+                    raise KollektivtrafikApiError("Unauthorized: Invalid API key")
                 if response.status == 404:
-                    raise KollektivtrafikApiError("404: Endpoint or Stop not found")
+                    raise KollektivtrafikApiError(f"Not Found: {url}")
+                if response.status == 429:
+                    raise KollektivtrafikApiError("Rate limit exceeded")
 
                 response.raise_for_status()
-                return await response.json()
+
+                try:
+                    return await response.json()
+                except (aiohttp.ContentTypeError, ValueError) as err:
+                    raise KollektivtrafikApiError(
+                        f"Malformed API response: {err}"
+                    ) from err
 
         except asyncio.TimeoutError as err:
-            raise KollektivtrafikApiError("Realtime API request timed out") from err
+            raise KollektivtrafikApiError("API request timed out") from err
         except aiohttp.ClientError as err:
-            raise KollektivtrafikApiError(
-                f"Realtime API connection error: {err}"
-            ) from err
+            raise KollektivtrafikApiError(f"Connection error: {err}") from err
 
     async def validate_api_key(self, test_stop_id: str = "740000001") -> bool:
-        """Validate API key by making a test request to Stockholm C."""
+        """Validate API key by making a test request."""
         try:
+            # If the request succeeds (returns JSON), the key is valid.
             await self.get_departures(test_stop_id)
             return True
-        except KollektivtrafikApiError as err:
-            _LOGGER.debug("Validation failed: %s", err)
+        except KollektivtrafikApiError:
             return False

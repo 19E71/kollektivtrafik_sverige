@@ -41,6 +41,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
 
         # Initialize internal tools
+        # session is managed by HA core via async_get_clientsession
         self.api = KollektivtrafikApiClient(
             entry.data[CONF_API_KEY], session=async_get_clientsession(hass)
         )
@@ -50,8 +51,8 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
-            # Use DOMAIN here to provide context in logs and satisfy linting
             name=f"{DOMAIN}_{entry.data[CONF_STOP_ID]}",
+            # Initial interval, will be dynamically adjusted by calculate_next_interval
             update_interval=timedelta(seconds=60),
         )
 
@@ -61,7 +62,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def stop_id(self) -> str:
         """Return stop ID from entry data."""
-        return self.entry.data[CONF_STOP_ID]
+        return str(self.entry.data[CONF_STOP_ID])
 
     @property
     def line_filter(self) -> str:
@@ -84,16 +85,17 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # 1. Fetch raw API data
         try:
+            # Matches the updated api.py signature for Unified API v1
             raw = await self.api.get_departures(self.stop_id)
         except Exception as err:
-            # We keep the old data in the queue until it expires naturally
             _LOGGER.error("Error fetching departures for %s: %s", self.stop_id, err)
             raise UpdateFailed(f"API error: {err}") from err
 
         # Record quota usage for the polling logic
-        self.quota.record_call()
+        self.quota.record_call(now)
 
         # 2. Parse raw response into normalized departure objects
+        # This uses the new parser that looks for 'realtime' and 'route' keys
         parsed = parse_departures_response(raw, now=now)
 
         # 3. Apply user-defined filters
@@ -115,10 +117,14 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             now=now,
         )
 
-        # Dynamically adjust the coordinator timer
+        # Dynamically adjust the coordinator timer for the next poll
         self.update_interval = timedelta(seconds=interval_sec)
+
         _LOGGER.debug(
-            "Next poll for %s scheduled in %s seconds", self.stop_id, interval_sec
+            "Fetched %d departures for %s. Next poll in %d seconds",
+            len(filtered),
+            self.stop_id,
+            interval_sec,
         )
 
         # 6. Return data for sensors
