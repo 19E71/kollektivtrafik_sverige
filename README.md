@@ -77,8 +77,7 @@ The integration creates **six sensors**:
 
 ## ⏱️ Sensor Behavior
 
-**State:** inutes until departure (integer) or a Timestamp (ISO string).
-
+**State:** Minutes until departure (integer) or a Timestamp (ISO string).
 **Attributes:**
 
 - `line`, `destination`, `direction`: Current trip details.
