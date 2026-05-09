@@ -25,9 +25,7 @@
 - **Line filtering** (e.g., `1, 4, 42X`).
 - **Direction filtering** (`0`, `1`, or empty for both).
 - **Optional time windows** (e.g., `06:00-10:00, 16:00-22:00`).
-- **Minimal API usage** (safe for Trafiklab quotas).
 - **Modern Home Assistant** — No YAML required.
-- **Clean, predictable entity naming** with no arrivals or bloat.
 
 ---
 
@@ -70,39 +68,37 @@ Use the official [Stop Lookup tool](https://www.trafiklab.se/api/our-apis/trafik
 3. Enter your **API key** and **Stop ID**.
 4. Configure optional filters and **Time Windows**.
 
-The integration creates **five sensors**:
+The integration creates **six sensors**:
 
-- `sensor.kollektivtrafik_sverige_departure_1` ... to `_5`
+- `sensor.[stop_name]_1` ... to `_5` (Names update dynamically based on the bus line).
+- `sensor.[stop_name]_api_quota_usage` (Tracks your daily API spend)
 
 ---
 
 ## ⏱️ Sensor Behavior
 
-**State:** Minutes until departure (integer).
+**State:** inutes until departure (integer) or a Timestamp (ISO string).
 
 **Attributes:**
 
-- `line`, `destination`, `direction`
-- `scheduled_time`, `expected_time`
-- `real_time` (boolean)
-- `transport_mode`, `deviations`
+- `line`, `destination`, `direction`: Current trip details.
+- `scheduled_time`, `expected_time`: Planned vs. estimated times.
+- `transport_mode`, `deviations`: Type of vehicle and any active delays/notices.
+- `next_poll_seconds`: Seconds until the next scheduled API refresh.
+- `api_quota_usage`: (Only on Quota sensor) Percentage of daily allowance used.
+- `throttle_factor`: Current polling speed multiplier (e.g., `1.5` means polling is slowed down to save budget).
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Architecture & Quotas
 
-This integration is built for robustness and minimal API usage:
+This integration uses a multi-layered polling strategy to manage the Trafiklab Bronze Tier (100k monthly calls) automatically.
 
-1. **Polling Engine:** Prevents overlapping requests.
-2. **Request Queue:** Protects your Trafiklab quota.
-3. **Coordinator:** Shares one API call across all five sensors.
-4. **Filters:** Efficiently processes lines, directions, and time windows.
-
-### 📉 API Quota Considerations
-
-- One API call per update interval.
-- Time windows reduce unnecessary polling during off-hours.
-- **Recommended interval:** 300 seconds (5 minutes).
+- **Dynamic Budgeting:** Calculates a daily "fair share" per stop based on the 3,300 total daily call limit.
+- **Throttling:** If usage exceeds the fair share, the polling interval is automatically doubled until the budget recovers.
+- **Reactive Polling:** Speeds up when a departure is within 5 minutes and slows down during long service gaps.
+- **Time Windows:** Completely pauses API requests outside of user-defined hours.
+- **Efficiency:** A single API request updates all 5 departure sensors and the quota sensor simultaneously.
 
 ---
 
