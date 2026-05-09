@@ -41,14 +41,22 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensors from config entry."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    # Note: Accessing via "instances" sub-key as defined in your new __init__.py
+    coordinator = hass.data[DOMAIN]["instances"][entry.entry_id]
 
-    # Create 5 sensors (departure_1 ... departure_5)
-    async_add_entities(DepartureSensor(coordinator, entry, index) for index in range(5))
+    entities: list[SensorEntity] = []
+
+    # Add the 5 departure sensors
+    entities.extend(DepartureSensor(coordinator, entry, index) for index in range(5))
+
+    # Add the Quota Usage sensor
+    entities.append(KollektivtrafikQuotaSensor(coordinator, entry))
+
+    async_add_entities(entities)
 
 
 class DepartureSensor(CoordinatorEntity, SensorEntity):
-    """A single departure sensor."""
+    """A departure sensor with dynamic bracket naming for perfect UI sorting."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:bus-clock"
@@ -56,12 +64,9 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-
         self._entry = entry
         self._index = index
         self._attr_unique_id = f"{entry.entry_id}_departure_{index}"
-        self._attr_translation_key = f"departure_{index + 1}"
-
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -70,89 +75,150 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
         )
 
     @property
+    def name(self) -> str | None:
+        """Return name like '1. (5 - Gångviken)' or fallback if empty."""
+        data = self._get_departure()
+        prefix = f"{self._index + 1}."
+
+        if not data:
+            # Check if we are currently inside an active polling window
+            # using the logic we already have in the coordinator
+            from .coordinator.polling import _in_time_window
+            from homeassistant.util import dt as dt_util
+
+            is_active = _in_time_window(dt_util.now(), self.coordinator.time_windows)
+
+            if is_active:
+                return f"{prefix} (No more departures in 60m)"
+            return f"{prefix} (Outside active window)"
+
+        line = data.get(ATTR_LINE)
+        destination = data.get(ATTR_DESTINATION)
+
+        if line and destination:
+            return f"{prefix} ({line} - {destination})"
+
+        return f"{prefix} (Departure)"
+
+    @property
     def native_value(self) -> int | datetime | None:
         """Return the sensor state (minutes or timestamp)."""
         data = self._get_departure()
         if not data:
             return None
 
-        # Logic: If we have minutes, use them as the primary state.
-        # If we only have a timestamp (bus is far away), use a datetime.
-        mins = data.get("minutes")
+        mins = data.get(ATTR_MINUTES)
         if mins is not None:
             return mins
 
-        timestamp = data.get("timestamp")
+        timestamp = data.get(ATTR_TIMESTAMP)
         if not timestamp:
             return None
 
         parsed = dt_util.parse_datetime(timestamp)
-        if parsed is None:
-            return None
-
-        if parsed.tzinfo is None:
+        if parsed and parsed.tzinfo is None:
             parsed = dt_util.as_local(parsed)
         return parsed
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        """Units are 'min' only when showing minutes."""
+        """Only show 'min' when state is minutes."""
         data = self._get_departure()
-        if data and data.get("minutes") is not None:
+        if data and data.get(ATTR_MINUTES) is not None:
             return "min"
         return None
 
     @property
     def state_class(self) -> SensorStateClass | None:
-        """Measurement class applies to minutes, but NOT to timestamps."""
         data = self._get_departure()
-        if data and data.get("minutes") is not None:
+        if data and data.get(ATTR_MINUTES) is not None:
             return SensorStateClass.MEASUREMENT
         return None
 
     @property
     def device_class(self) -> SensorDeviceClass | None:
-        """Set to TIMESTAMP only if we are actually displaying a timestamp string."""
         data = self._get_departure()
-        if not data:
+        if not data or data.get(ATTR_MINUTES) is not None:
             return None
-
-        # If we are displaying 'minutes' (an int), device_class MUST be None.
-        if data.get("minutes") is not None:
-            return None
-
-        # If we are falling back to the timestamp string, use TIMESTAMP class.
-        if data.get("timestamp") is not None:
+        if data.get(ATTR_TIMESTAMP) is not None:
             return SensorDeviceClass.TIMESTAMP
-
         return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional attributes with safe defaults."""
+        """Expose bus details and the next poll time."""
         data = self._get_departure()
-        if not data:
-            return {}
+        attrs = {}
 
-        return {
-            ATTR_LINE: data.get("line"),
-            ATTR_DESTINATION: data.get("destination"),
-            ATTR_DIRECTION: data.get("direction"),
-            ATTR_EXPECTED_TIME: data.get("expected_time"),
-            ATTR_SCHEDULED_TIME: data.get("scheduled_time"),
-            ATTR_MINUTES: data.get("minutes"),
-            ATTR_TIMESTAMP: data.get("timestamp"),
-            ATTR_TRANSPORT_MODE: data.get("transport_mode"),
-            ATTR_DEVIATIONS: data.get("deviations", []),
-        }
+        if data:
+            attrs.update(
+                {
+                    ATTR_LINE: data.get(ATTR_LINE),
+                    ATTR_DESTINATION: data.get(ATTR_DESTINATION),
+                    ATTR_DIRECTION: data.get(ATTR_DIRECTION),
+                    ATTR_EXPECTED_TIME: data.get(ATTR_EXPECTED_TIME),
+                    ATTR_SCHEDULED_TIME: data.get(ATTR_SCHEDULED_TIME),
+                    ATTR_MINUTES: data.get(ATTR_MINUTES),
+                    ATTR_TIMESTAMP: data.get(ATTR_TIMESTAMP),
+                    ATTR_TRANSPORT_MODE: data.get(ATTR_TRANSPORT_MODE),
+                    ATTR_DEVIATIONS: data.get(ATTR_DEVIATIONS, []),
+                }
+            )
+
+        # Add global integration info
+        attrs["next_poll_seconds"] = self.coordinator.data.get("next_poll_seconds")
+
+        return attrs
 
     def _get_departure(self) -> dict[str, Any] | None:
-        """Return the departure dict for this sensor index."""
+        """Safe access to the coordinator's departure list."""
         if not self.coordinator.data or "departures" not in self.coordinator.data:
             return None
 
         deps = self.coordinator.data["departures"]
-        if self._index >= len(deps):
-            return None
+        if self._index < len(deps):
+            return deps[self._index]
+        return None
 
-        return deps[self._index]
+
+class KollektivtrafikQuotaSensor(CoordinatorEntity, SensorEntity):
+    """Sensor to track API quota usage for this specific stop."""
+
+    _attr_has_entity_name = True
+    _attr_name = "API Quota Usage"
+    _attr_icon = "mdi:chart-donut"
+    _attr_native_unit_of_measurement = "%"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
+        """Initialize the quota sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_quota_usage"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+        )
+
+    @property
+    def native_value(self) -> float:
+        """Return the percentage of the daily budget used."""
+        used = self.coordinator.quota.calls_last_day()
+        total = self.coordinator.quota.daily_allowance
+
+        if total == 0:
+            return 0.0
+
+        return round((used / total) * 100, 1)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose raw call counts and throttling status."""
+        tracker = self.coordinator.quota
+        return {
+            "calls_last_24h": tracker.calls_last_day(),
+            "calls_last_hour": tracker.calls_last_hour(),
+            "daily_allowance": tracker.daily_allowance,
+            "hourly_allowance": tracker.hourly_allowance,
+            "throttle_factor": tracker.throttle_factor(),
+            "active_stops_sharing_quota": tracker.stop_count,
+        }

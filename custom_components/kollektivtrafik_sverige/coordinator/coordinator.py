@@ -39,16 +39,18 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None:
         """Initialize the coordinator."""
         self.entry = entry
-        self.api = client  # Use the client passed from __init__.py
+        self.api = client
 
         self.queue = DepartureQueue()
-        self.quota = QuotaTracker()
+
+        # Pass hass here so the tracker can access global stop counts in hass.data
+        self.quota = QuotaTracker(hass)
 
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{entry.data[CONF_STOP_ID]}",
-            # Initial interval, will be dynamically adjusted by calculate_next_interval
+            # Default interval; adjusted dynamically after the first poll
             update_interval=timedelta(seconds=60),
         )
 
@@ -65,7 +67,6 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def direction_filter(self) -> str | None:
         """Return direction filter from entry options."""
-        # Use .get() to return None if it's not set
         return self.entry.options.get(CONF_DIRECTION_FILTER)
 
     @property
@@ -84,7 +85,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.error("Error fetching departures for %s: %s", self.stop_id, err)
             raise UpdateFailed(f"API error: {err}") from err
 
-        # Record quota usage for the polling logic
+        # Record quota usage for the dynamic polling logic
         self.quota.record_call(now)
 
         # 2. Parse raw response into normalized departure objects
@@ -101,7 +102,8 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.queue.prune_expired(now)
         self.queue.update(filtered)
 
-        # 5. Calculate next polling interval based on traffic density and quotas
+        # 5. Calculate next polling interval
+        # The tracker now calculates the "Budget Floor" based on active stop count
         interval_sec = calculate_next_interval(
             queue=self.queue,
             time_windows=self.time_windows,
@@ -109,14 +111,15 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             now=now,
         )
 
-        # Dynamically adjust the coordinator timer for the next poll
+        # Apply the new interval to the coordinator timer
         self.update_interval = timedelta(seconds=interval_sec)
 
         _LOGGER.debug(
-            "Fetched %d departures for %s. Next poll in %d seconds",
-            len(filtered),
+            "Stop %s: Fetched %d departures. Next poll in %ds (Quota level: %.1fx)",
             self.stop_id,
+            len(filtered),
             interval_sec,
+            self.quota.throttle_factor(now),
         )
 
         # 6. Return data for sensors

@@ -55,11 +55,9 @@
   },
   "entity": {
     "sensor": {
-      "departure_1": { "name": "1. Next Departure" },
-      "departure_2": { "name": "2. Second Departure" },
-      "departure_3": { "name": "3. Third Departure" },
-      "departure_4": { "name": "4. Fourth Departure" },
-      "departure_5": { "name": "5. Fifth Departure" }
+      "api_quota_usage": {
+        "name": "API quota usage"
+      }
     }
   }
 }

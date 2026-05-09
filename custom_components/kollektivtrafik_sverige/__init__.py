@@ -13,8 +13,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KollektivtrafikApiClient
 from .const import DOMAIN, CONF_API_KEY
-
-# FIXED: Added "Sverige" to match your sub-package export
 from .coordinator import KollektivtrafikSverigeCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
@@ -23,19 +21,31 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kollektivtrafik Sverige from a config entry."""
 
+    # 1. Initialize shared data and update the global stop count
+    hass.data.setdefault(DOMAIN, {})
+
+    # Calculate how many stops are currently configured
+    all_entries = hass.config_entries.async_entries(DOMAIN)
+    hass.data[DOMAIN]["active_stop_count"] = len(all_entries)
+
+    # 2. Set up the API Client
     session = async_get_clientsession(hass)
     client = KollektivtrafikApiClient(
         api_key=entry.data[CONF_API_KEY],
         session=session,
     )
 
-    # FIXED: Use the correct class name here
+    # 3. Initialize the Coordinator
     coordinator = KollektivtrafikSverigeCoordinator(hass, client, entry)
 
+    # Fetch initial data so the sensors aren't empty on startup
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    # 4. Store the coordinator instance using its entry_id
+    # We use a sub-key "instances" to keep it separate from our global count
+    hass.data[DOMAIN].setdefault("instances", {})[entry.entry_id] = coordinator
 
+    # Listen for option changes
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -48,8 +58,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-        if not hass.data[DOMAIN]:
+        # Clean up the coordinator from memory
+        if "instances" in hass.data[DOMAIN]:
+            hass.data[DOMAIN]["instances"].pop(entry.entry_id)
+
+        # Update the global stop count for remaining instances
+        all_entries = hass.config_entries.async_entries(DOMAIN)
+        if all_entries:
+            hass.data[DOMAIN]["active_stop_count"] = len(all_entries)
+        else:
+            # If no entries remain, purge the domain data entirely
             hass.data.pop(DOMAIN)
 
     return unload_ok

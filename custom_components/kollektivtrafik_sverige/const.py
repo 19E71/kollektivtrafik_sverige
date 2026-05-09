@@ -14,6 +14,15 @@ from typing import Final
 DOMAIN: Final = "kollektivtrafik_sverige"
 
 # ---------------------------------------------------------------------------
+# Quota Management (Trafiklab Bronze Tier)
+# ---------------------------------------------------------------------------
+
+# The monthly limit is 100,000.
+# 100,000 / 30 days = ~3,333 calls per day.
+GLOBAL_DAILY_QUOTA: Final = 3300
+QUOTA_TARGET_USAGE: Final = 0.90  # 90% safety buffer
+
+# ---------------------------------------------------------------------------
 # Logic limits
 # ---------------------------------------------------------------------------
 
