@@ -60,11 +60,20 @@ async def validate_api_key(hass: HomeAssistant, api_key: str) -> None:
         raise CannotConnect from err
 
 
-async def validate_stop_id(hass: HomeAssistant, api_key: str, stop_id: str) -> None:
-    """Validate the specific stop ID."""
+async def validate_stop_id(hass: HomeAssistant, api_key: str, stop_id: str) -> str:
+    """Validate the specific stop ID and return the friendly name."""
     client = KollektivtrafikApiClient(api_key, session=async_get_clientsession(hass))
     try:
-        await client.get_departures(stop_id)
+        raw_data = await client.get_departures(stop_id)
+
+        # Extract friendly name from the 'stops' list in the v1 response
+        stops = raw_data.get("stops", [])
+        if stops and isinstance(stops, list):
+            name = stops[0].get("name")
+            if name:
+                return name
+
+        return f"Stop {stop_id}"
     except KollektivtrafikApiError as err:
         if "404" in str(err):
             raise InvalidStopId from err
@@ -80,6 +89,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize flow."""
         self._api_key: str | None = None
         self._stop_id: str | None = None
+        self._stop_name: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -116,7 +126,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             try:
-                await validate_stop_id(
+                # Capture the name while validating the stop
+                self._stop_name = await validate_stop_id(
                     self.hass, self._api_key, user_input[CONF_STOP_ID]
                 )
                 self._stop_id = user_input[CONF_STOP_ID]
@@ -139,19 +150,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_filters(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 3: Set Filters (Can be left blank for testing)."""
+        """Step 3: Set Filters and create entry."""
         if user_input is not None:
             line_filter = user_input.get(CONF_LINE_FILTER, "")
             direction_filter = user_input.get(CONF_DIRECTION_FILTER, "")
 
-            # Use a robust Unique ID to prevent collisions
             await self.async_set_unique_id(
                 f"{self._stop_id}_{line_filter}_{direction_filter}"
             )
             self._abort_if_unique_id_configured()
 
             return self.async_create_entry(
-                title=f"Stop {self._stop_id}",
+                title=self._stop_name,
                 data={
                     CONF_API_KEY: self._api_key,
                     CONF_STOP_ID: self._stop_id,
