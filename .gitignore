@@ -17,6 +17,7 @@ home-assistant.log*
 *.db-wal
 .HA_VERSION
 .storage/
+/config/
 # This ensures translations folder exists but is empty if needed
 custom_components/kollektivtrafik_sverige/translations/.placeholder
 
@@ -28,9 +29,11 @@ secrets.yaml
 
 # Editor settings
 .vscode/
+.devcontainer/
 .idea/
 *.swp
 *.swo
+*.txt
 
 # OS junk
 .DS_Store
