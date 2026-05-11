@@ -17,9 +17,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
@@ -33,6 +31,7 @@ from .const import (
     ATTR_TRANSPORT_MODE,
     ATTR_DEVIATIONS,
 )
+from .entity import KollektivtrafikSverigeEntity
 
 
 async def async_setup_entry(
@@ -55,7 +54,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class DepartureSensor(CoordinatorEntity, SensorEntity):
+class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
     """A departure sensor with dynamic bracket naming for perfect UI sorting."""
 
     _attr_has_entity_name = True
@@ -63,16 +62,7 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry = entry
-        self._index = index
-        self._attr_unique_id = f"{entry.entry_id}_departure_{index}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
-            manufacturer="19E71",
-            model="Kollektivtrafik Sverige",
-        )
+        super().__init__(coordinator, entry, index)
 
     @property
     def name(self) -> str | None:
@@ -170,18 +160,8 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
 
         return attrs
 
-    def _get_departure(self) -> dict[str, Any] | None:
-        """Safe access to the coordinator's departure list."""
-        if not self.coordinator.data or "departures" not in self.coordinator.data:
-            return None
 
-        deps = self.coordinator.data["departures"]
-        if self._index < len(deps):
-            return deps[self._index]
-        return None
-
-
-class KollektivtrafikQuotaSensor(CoordinatorEntity, SensorEntity):
+class KollektivtrafikQuotaSensor(KollektivtrafikSverigeEntity, SensorEntity):
     """Sensor to track API quota usage for this specific stop."""
 
     _attr_has_entity_name = True
@@ -192,12 +172,8 @@ class KollektivtrafikQuotaSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
         """Initialize the quota sensor."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_quota_usage"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
-        )
 
     @property
     def native_value(self) -> float:
