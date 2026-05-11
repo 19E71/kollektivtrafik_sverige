@@ -90,4 +90,5 @@ class DepartureQueue:
             "timestamp": timestamp_display,
             "transport_mode": dep.transport_mode,
             "deviations": dep.deviations,
+            "summary_deviation": dep.summary_deviation,
         }

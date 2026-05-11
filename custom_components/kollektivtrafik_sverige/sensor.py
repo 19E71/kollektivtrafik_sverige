@@ -30,6 +30,9 @@ from .const import (
     ATTR_TIMESTAMP,
     ATTR_TRANSPORT_MODE,
     ATTR_DEVIATIONS,
+    ATTR_SUMMARY_DEVIATION,
+    TRANSPORT_MODE_ICONS,
+    DEFAULT_TRANSPORT_ICON,
 )
 from .entity import KollektivtrafikSverigeEntity
 
@@ -58,11 +61,20 @@ class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
     """A departure sensor with dynamic bracket naming for perfect UI sorting."""
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:bus-clock"
 
     def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, entry, index)
+
+    @property
+    def icon(self) -> str | None:
+        """Return dynamic icon based on transport mode."""
+        data = self._get_departure()
+        if not data:
+            return DEFAULT_TRANSPORT_ICON
+
+        transport_mode = data.get(ATTR_TRANSPORT_MODE, "").upper()
+        return TRANSPORT_MODE_ICONS.get(transport_mode, DEFAULT_TRANSPORT_ICON)
 
     @property
     def name(self) -> str | None:
@@ -152,6 +164,7 @@ class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
                     ATTR_TIMESTAMP: data.get(ATTR_TIMESTAMP),
                     ATTR_TRANSPORT_MODE: data.get(ATTR_TRANSPORT_MODE),
                     ATTR_DEVIATIONS: data.get(ATTR_DEVIATIONS, []),
+                    ATTR_SUMMARY_DEVIATION: data.get(ATTR_SUMMARY_DEVIATION, ""),
                 }
             )
 

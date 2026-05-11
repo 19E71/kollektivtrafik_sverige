@@ -64,11 +64,29 @@ class KollektivtrafikApiClient:
         return await self._async_request(url)
 
     async def search_stops(self, search_value: str) -> list[dict[str, Any]]:
-        """Search for stops by name."""
+        """Search for stops by name.
+
+        Returns a flattened list of stops from all stop_groups in the response.
+        Each stop includes its parent stop_group's transport_modes for context.
+        """
         # Build URL: https://realtime-api.trafiklab.se/v1/stops/name/{search_value}
         url = URL(BASE_URL) / "stops" / "name" / search_value
         data = await self._async_request(url)
-        return data.get("stops", [])
+
+        # Flatten stop_groups -> stops into a single list
+        flattened_stops = []
+        for stop_group in data.get("stop_groups", []):
+            transport_modes = stop_group.get("transport_modes", [])
+            group_name = stop_group.get("name", "")
+
+            for stop in stop_group.get("stops", []):
+                # Enhance each stop with parent group context
+                enhanced_stop = dict(stop)
+                enhanced_stop["group_name"] = group_name
+                enhanced_stop["transport_modes"] = transport_modes
+                flattened_stops.append(enhanced_stop)
+
+        return flattened_stops
 
     async def _async_request(self, url: URL) -> dict[str, Any]:
         """Make a request to the API with unified error handling."""

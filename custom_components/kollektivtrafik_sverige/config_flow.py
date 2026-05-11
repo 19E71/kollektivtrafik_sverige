@@ -25,7 +25,6 @@ from .const import (
     CONF_TIME_WINDOWS,
     DOMAIN,
     ERROR_API_KEY_INVALID,
-    ERROR_STOP_NOT_FOUND,
     ERROR_CONNECTION,
     ERROR_UNKNOWN,
     PROJECT_LINK,
@@ -44,10 +43,6 @@ class InvalidApiKey(HomeAssistantError):
     """Error to indicate the API key is invalid."""
 
 
-class InvalidStopId(HomeAssistantError):
-    """Error to indicate the stop ID is invalid."""
-
-
 async def validate_api_key(hass: HomeAssistant, api_key: str) -> None:
     """Validate ONLY the API key using a known stop ID (Stockholm C)."""
     client = KollektivtrafikApiClient(api_key, session=async_get_clientsession(hass))
@@ -57,26 +52,6 @@ async def validate_api_key(hass: HomeAssistant, api_key: str) -> None:
     except KollektivtrafikApiError as err:
         if "403" in str(err):
             raise InvalidApiKey from err
-        raise CannotConnect from err
-
-
-async def validate_stop_id(hass: HomeAssistant, api_key: str, stop_id: str) -> str:
-    """Validate the specific stop ID and return the friendly name."""
-    client = KollektivtrafikApiClient(api_key, session=async_get_clientsession(hass))
-    try:
-        raw_data = await client.get_departures(stop_id)
-
-        # Extract friendly name from the 'stops' list in the v1 response
-        stops = raw_data.get("stops", [])
-        if stops and isinstance(stops, list):
-            name = stops[0].get("name")
-            if name:
-                return name
-
-        return f"Stop {stop_id}"
-    except KollektivtrafikApiError as err:
-        if "404" in str(err):
-            raise InvalidStopId from err
         raise CannotConnect from err
 
 
@@ -90,6 +65,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._api_key: str | None = None
         self._stop_id: str | None = None
         self._stop_name: str | None = None
+        self._search_results: list[dict[str, Any]] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -100,7 +76,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await validate_api_key(self.hass, user_input[CONF_API_KEY])
                 self._api_key = user_input[CONF_API_KEY]
-                return await self.async_step_stop()
+                return await self.async_step_search()
             except InvalidApiKey:
                 errors["base"] = ERROR_API_KEY_INVALID
             except CannotConnect:
@@ -119,38 +95,73 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_stop(
+    async def async_step_search(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 2: Get and Verify Stop ID."""
+        """Step 2: Search for stops by name."""
         errors = {}
         if user_input is not None:
-            try:
-                # Capture the name while validating the stop
-                self._stop_name = await validate_stop_id(
-                    self.hass, self._api_key, user_input[CONF_STOP_ID]
-                )
-                self._stop_id = user_input[CONF_STOP_ID]
-                return await self.async_step_filters()
-            except InvalidStopId:
-                errors[CONF_STOP_ID] = ERROR_STOP_NOT_FOUND
-            except CannotConnect:
-                errors["base"] = ERROR_CONNECTION
-            except Exception:
-                _LOGGER.exception("Unexpected error during Stop ID validation")
-                errors["base"] = ERROR_UNKNOWN
+            search_value = user_input.get("search_query", "").strip()
+            if not search_value:
+                errors["base"] = "invalid_search"
+            else:
+                try:
+                    client = KollektivtrafikApiClient(
+                        self._api_key, session=async_get_clientsession(self.hass)
+                    )
+                    self._search_results = await client.search_stops(search_value)
+
+                    if not self._search_results:
+                        errors["base"] = "no_results"
+                    else:
+                        return await self.async_step_select()
+                except KollektivtrafikApiError:
+                    errors["base"] = ERROR_CONNECTION
+                except Exception:
+                    _LOGGER.exception("Unexpected error during stop search")
+                    errors["base"] = ERROR_UNKNOWN
 
         return self.async_show_form(
-            step_id="stop",
-            data_schema=vol.Schema({vol.Required(CONF_STOP_ID): str}),
+            step_id="search",
+            data_schema=vol.Schema({vol.Required("search_query"): str}),
             errors=errors,
+            description_placeholders={"stop_lookup_link": STOP_LOOKUP_LINK},
+        )
+
+    async def async_step_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Step 3: Select from search results."""
+        if user_input is not None:
+            selected_index = int(user_input.get("selected_stop", 0))
+            if 0 <= selected_index < len(self._search_results):
+                selected_stop = self._search_results[selected_index]
+                self._stop_id = selected_stop.get("id")
+                self._stop_name = selected_stop.get("name")
+                return await self.async_step_filters()
+
+        # Build options for the select list
+        select_options = {}
+        for idx, stop in enumerate(self._search_results):
+            name = stop.get("name", "Unknown")
+            group_name = stop.get("group_name", "")
+            display = f"{name}"
+            if group_name and group_name != name:
+                display += f" ({group_name})"
+            select_options[str(idx)] = display
+
+        return self.async_show_form(
+            step_id="select",
+            data_schema=vol.Schema(
+                {vol.Required("selected_stop"): vol.In(select_options)}
+            ),
             description_placeholders={"stop_lookup_link": STOP_LOOKUP_LINK},
         )
 
     async def async_step_filters(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 3: Set Filters and create entry."""
+        """Step 4: Set Filters and create entry."""
         if user_input is not None:
             line_filter = user_input.get(CONF_LINE_FILTER, "")
             direction_filter = user_input.get(CONF_DIRECTION_FILTER, "")
