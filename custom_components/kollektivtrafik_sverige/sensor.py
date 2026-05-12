@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_TRANSPORT_ICON,
 )
 from .entity import KollektivtrafikSverigeEntity
+from .sensor_global import GlobalQuotaSensor
 
 
 async def async_setup_entry(
@@ -51,8 +52,17 @@ async def async_setup_entry(
     # Add the 5 departure sensors
     entities.extend(DepartureSensor(coordinator, entry, index) for index in range(5))
 
-    # Add the Quota Usage sensor
-    entities.append(KollektivtrafikQuotaSensor(coordinator, entry))
+    # Add the global quota sensor only once
+    global_data = hass.data[DOMAIN]["global"]
+    if not global_data.get("sensor_created"):
+        global_sensor = GlobalQuotaSensor(hass)
+        entities.append(global_sensor)
+        global_data["sensor_created"] = True
+        global_data["sensor"] = global_sensor
+    else:
+        global_sensor = global_data.get("sensor")
+        if global_sensor is not None:
+            global_sensor.register_coordinator(coordinator)
 
     async_add_entities(entities)
 
@@ -168,46 +178,4 @@ class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
                 }
             )
 
-        # Add global integration info
-        attrs["next_poll_seconds"] = self.coordinator.data.get("next_poll_seconds")
-
         return attrs
-
-
-class KollektivtrafikQuotaSensor(KollektivtrafikSverigeEntity, SensorEntity):
-    """Sensor to track API quota usage for this specific stop."""
-
-    _attr_has_entity_name = True
-    _attr_name = "API Quota Usage"
-    _attr_icon = "mdi:chart-donut"
-    _attr_native_unit_of_measurement = "%"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
-    def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
-        """Initialize the quota sensor."""
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_quota_usage"
-
-    @property
-    def native_value(self) -> float:
-        """Return the percentage of the daily budget used."""
-        used = self.coordinator.quota.calls_last_day()
-        total = self.coordinator.quota.daily_allowance
-
-        if total == 0:
-            return 0.0
-
-        return round((used / total) * 100, 1)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose raw call counts and throttling status."""
-        tracker = self.coordinator.quota
-        return {
-            "calls_last_24h": tracker.calls_last_day(),
-            "calls_last_hour": tracker.calls_last_hour(),
-            "daily_allowance": tracker.daily_allowance,
-            "hourly_allowance": tracker.hourly_allowance,
-            "throttle_factor": tracker.throttle_factor(),
-            "active_stops_sharing_quota": tracker.stop_count,
-        }

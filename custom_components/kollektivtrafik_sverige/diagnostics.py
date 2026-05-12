@@ -31,7 +31,7 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
 
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = hass.data[DOMAIN]["instances"][entry.entry_id]
 
     # Integration metadata
     integration = await async_get_integration(hass, DOMAIN)

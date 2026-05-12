@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .api import KollektivtrafikApiClient
 from .const import DOMAIN, CONF_API_KEY
@@ -18,11 +19,31 @@ from .coordinator import KollektivtrafikSverigeCoordinator
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up shared Kollektivtrafik Sverige integration state."""
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(
+        "global",
+        {
+            "per_stop": {},
+            "sensor_created": False,
+            "device_info": DeviceInfo(
+                identifiers={(DOMAIN, "global")},
+                name="Kollektivtrafik Sverige (Diagnostics)",
+                manufacturer="19E71",
+                model="Integration Diagnostics",
+            ),
+        },
+    )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kollektivtrafik Sverige from a config entry."""
 
     # 1. Initialize shared data and update the global stop count
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault("global", {"per_stop": {}, "sensor_created": False})
 
     # Calculate how many stops are currently configured
     all_entries = hass.config_entries.async_entries(DOMAIN)
@@ -60,7 +81,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         # Clean up the coordinator from memory
         if "instances" in hass.data[DOMAIN]:
-            hass.data[DOMAIN]["instances"].pop(entry.entry_id)
+            hass.data[DOMAIN]["instances"].pop(entry.entry_id, None)
+
+        # Clean up the per-stop global state
+        if "global" in hass.data[DOMAIN]:
+            hass.data[DOMAIN]["global"]["per_stop"].pop(entry.entry_id, None)
 
         # Update the global stop count for remaining instances
         all_entries = hass.config_entries.async_entries(DOMAIN)
