@@ -8,11 +8,18 @@
           "api_key": "API Key"
         }
       },
-      "stop": {
-        "title": "Stop ID",
-        "description": "Enter the stop ID you want to monitor.\n\nYou can search for stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section, enter a stop name, enter your API key, and open the generated URL in your browser.",
+      "search": {
+        "title": "Search for Stop",
+        "description": "Search for a public transport stop by name.\n\nYou can also look up stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section and enter your search query.",
         "data": {
-          "stop_id": "Stop ID"
+          "search_query": "Stop Name or ID"
+        }
+      },
+      "select": {
+        "title": "Select Stop",
+        "description": "Select the stop you want to monitor from the search results.",
+        "data": {
+          "selected_stop": "Stop"
         }
       },
       "filters": {
@@ -22,18 +29,12 @@
           "line_filter": "Line Filter",
           "direction_filter": "Direction Filter"
         }
-      },
-      "time_windows": {
-        "title": "Time Windows",
-        "description": "Optional polling windows (e.g., 06:00-10:00, 16:00-22:00).",
-        "data": {
-          "time_windows": "Time Windows"
-        }
       }
     },
     "error": {
       "invalid_api_key": "The API key is invalid.",
-      "invalid_stop_id": "The stop ID is invalid.",
+      "invalid_search": "Please enter a stop name or ID to search.",
+      "no_results": "No stops found. Please try a different search term.",
       "cannot_connect": "Unable to connect to the API."
     },
     "abort": {
@@ -47,16 +48,64 @@
         "description": "Update filters and time windows.",
         "data": {
           "line_filter": "Line Filter",
-          "direction_filter": "Direction Filter",
-          "time_windows": "Time Windows"
+          "direction_filter": "Direction Filter"
         }
       }
     }
   },
   "entity": {
     "sensor": {
+      "departure_1": {
+        "name": "Departure 1"
+      },
+      "departure_2": {
+        "name": "Departure 2"
+      },
+      "departure_3": {
+        "name": "Departure 3"
+      },
+      "departure_4": {
+        "name": "Departure 4"
+      },
+      "departure_5": {
+        "name": "Departure 5"
+      },
       "api_quota_usage": {
-        "name": "API quota usage"
+        "name": "API Quota Usage"
+      }
+    }
+  },
+  "entityAttributes": {
+    "sensor": {
+      "line": {
+        "name": "Line"
+      },
+      "destination": {
+        "name": "Destination"
+      },
+      "direction": {
+        "name": "Direction"
+      },
+      "expected_time": {
+        "name": "Expected Time"
+      },
+      "scheduled_time": {
+        "name": "Scheduled Time"
+      },
+      "minutes": {
+        "name": "Minutes Until Departure"
+      },
+      "timestamp": {
+        "name": "Departure Timestamp"
+      },
+      "transport_mode": {
+        "name": "Transport Mode"
+      },
+      "deviations": {
+        "name": "Deviations"
+      },
+      "summary_deviation": {
+        "name": "Deviation Summary"
       }
     }
   }

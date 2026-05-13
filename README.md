@@ -56,17 +56,21 @@
 ## 🚀 Setup Guide
 
 ### 1. Get your API Key
+
 1. Sign up at [Trafiklab](https://developer.trafiklab.se/).
 2. Create a project and generate a key for the **Trafiklab Unified Realtime API v1**.
    > [!NOTE]
    > Ensure you are using the "Trafiklab Realtime APIs", not the older "SL" specific APIs.
 
 ### 2. Find your Stop ID
+
 Use the official [Stop Lookup tool](https://www.trafiklab.se/api/our-apis/trafiklab-realtime-apis/stop-lookup):
+
 1. Enter your API key and search for your stop.
 2. Look for the `stop_group -> id` (usually a 9-digit number starting with `74`).
 
 ### 3. Add the Integration
+
 1. In Home Assistant, go to **Settings → Devices & Services**.
 2. Click **Add Integration** and search for **Kollektivtrafik Sverige**.
 3. Enter your **API Key** and **Stop ID**.
@@ -78,14 +82,15 @@ Use the official [Stop Lookup tool](https://www.trafiklab.se/api/our-apis/trafik
 
 This integration is designed to be "set and forget." It manages your API quota automatically:
 
-| Mode | Description |
-| :--- | :--- |
-| **Normal** | High-precision updates when departures are imminent. |
+| Mode             | Description                                                      |
+| :--------------- | :--------------------------------------------------------------- |
+| **Normal**       | High-precision updates when departures are imminent.             |
 | **Conservative** | Polling slowed down by 50% as you approach hourly budget limits. |
-| **Throttled** | Polling slowed down by 100% if the daily budget is at risk. |
-| **Low Power** | API calls are paused outside of your defined **Time Windows**. |
+| **Throttled**    | Polling slowed down by 100% if the daily budget is at risk.      |
+| **Low Power**    | API calls are paused outside of your defined **Time Windows**.   |
 
 ### Global Diagnostics Device
+
 The integration creates a special **Global Diagnostics** device that tracks the health and usage of the entire integration across all configured stops.
 
 - **Global API Quota Usage**: A sensor showing the percentage of your daily allowance used.
