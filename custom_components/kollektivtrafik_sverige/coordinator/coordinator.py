@@ -82,6 +82,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "service_gap": service_gap,
             "time_window_active": time_window_active,
             "polling_mode": polling_mode,
+            "throttle_factor": self.quota.throttle_factor(now),
         }
 
     @property
