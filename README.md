@@ -1,116 +1,123 @@
 <p align="center">
-  <img src="custom_components/kollektivtrafik_sverige/brand/icon.png" width="150" height="150" style="display: block; margin: 0 auto;" alt="Kollektivtrafik Sverige Logo">
-  <h1 align="center">Kollektivtrafik Sverige</h1>
-  <p align="center">
-    <b>Home Assistant integration for Swedish public transport realtime departures.</b><br>
-    Powered by the Trafiklab Realtime APIs.
-  </p>
+  <img src="custom_components/kollektivtrafik_sverige/brand/icon.png" width="128" height="128" alt="Kollektivtrafik Sverige Logo">
+</p>
+
+<h1 align="center">Kollektivtrafik Sverige</h1>
+
+<p align="center">
+  <b>Advanced Home Assistant integration for real-time Swedish public transport.</b><br>
+  <i>Powered by the Trafiklab Unified Realtime API v1.</i>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/19E71/Kollektivtrafik_Sverige?style=flat-square" alt="Version">
-  <img src="https://img.shields.io/badge/license-MPL--2.0-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/HACS-Custom-orange?style=flat-square" alt="HACS">
-  <img src="https://img.shields.io/badge/code%20style-ruff-000000.svg?style=flat-square" alt="Code Style: Ruff">
-  <img src="https://img.shields.io/github/last-commit/19E71/Kollektivtrafik_Sverige?style=flat-square" alt="Last Updated">
-  <img src="https://img.shields.io/github/issues/19E71/Kollektivtrafik_Sverige?style=flat-square" alt="Issues">
+  <a href="https://github.com/19E71/Kollektivtrafik_Sverige/releases"><img src="https://img.shields.io/github/v/release/19E71/Kollektivtrafik_Sverige?style=for-the-badge&color=blue" alt="Version"></a>
+  <a href="https://opensource.org/licenses/MPL-2.0"><img src="https://img.shields.io/badge/License-MPL--2.0-brightgreen?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-orange?style=for-the-badge" alt="HACS"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/Code%20Style-Ruff-000000?style=for-the-badge" alt="Code Style: Ruff"></a>
 </p>
 
 ---
 
-## 🚍 Features
+## 🚍 Overview
 
-- **Realtime departures** from any Trafiklab-supported stop in Sweden.
-- **Five departure sensors per stop** (next 5 departures).
-- **Line filtering** (e.g., `1, 4, 42X`).
-- **Direction filtering** (`0`, `1`, or empty for both).
-- **Optional time windows** (e.g., `06:00-10:00, 16:00-22:00`).
-- **Modern Home Assistant** — No YAML required.
+**Kollektivtrafik Sverige** brings real-time departures from virtually any public transport stop in Sweden directly into your Home Assistant dashboard. Whether it's a bus in Kiruna or a subway in Stockholm, this integration provides precise timing, dynamic updates, and intelligent API quota management.
+
+### ✨ Key Features
+
+- ⏱️ **Real-time Departures**: Up to 5 live departure sensors per stop, sorted by proximity.
+- 🏷️ **Dynamic Naming**: Sensors automatically rename themselves to show the line and destination (e.g., `1. (4 - Gullmarsplan)`).
+- 🔍 **Flexible Filtering**: Filter by Line ID or Direction to see exactly what you need.
+- 🛡️ **Quota Watchdog**: Intelligent logic that automatically throttles polling to stay within the Trafiklab Bronze Tier limits.
+- 🌓 **Time Windows**: Define active hours to pause polling and save API budget during the night or while you're at work.
+- 📊 **Global Diagnostics**: Integration-wide sensors for API usage, throttle factors, and service gaps.
 
 ---
 
 ## 📦 Installation
 
+### Option 1: HACS (Recommended)
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=19E71&repository=https%3A%2F%2Fgithub.com%2F19E71%2Fkollektivtrafik_sverige)
 
-### HACS
-
-1. Open **HACS → Integrations**.
-2. Click the three dots in the top right and select **Custom Repositories**.
-3. Add `https://github.com/19E71/Kollektivtrafik_Sverige` with category **Integration**.
-4. Search for **Kollektivtrafik Sverige** and install.
+1. Open **HACS** in your Home Assistant instance.
+2. Click the three dots in the top right corner and select **Custom Repositories**.
+3. Paste `https://github.com/19E71/Kollektivtrafik_Sverige` and select **Integration** as the category.
+4. Click **Add**, then search for **Kollektivtrafik Sverige** and click **Download**.
 5. **Restart** Home Assistant.
 
----
+### Option 2: Manual
 
-## 🔑 Getting Your Trafiklab API Key
-
-1. **Create a project:** Sign up/in at [Trafiklab Project List](https://developer.trafiklab.se/project/list).
-2. **Generate Key:** Inside your project, click **Create Key** and select **Trafiklab Realtime APIs**.
-3. **Save:** This is the key you will enter during the Home Assistant setup.
+1. Download the latest release.
+2. Copy the `custom_components/kollektivtrafik_sverige` folder into your Home Assistant `custom_components` directory.
+3. **Restart** Home Assistant.
 
 ---
 
-## 🆔 Finding Your Stop ID
+## 🚀 Setup Guide
 
+### 1. Get your API Key
+1. Sign up at [Trafiklab](https://developer.trafiklab.se/).
+2. Create a project and generate a key for the **Trafiklab Unified Realtime API v1**.
+   > [!NOTE]
+   > Ensure you are using the "Trafiklab Realtime APIs", not the older "SL" specific APIs.
+
+### 2. Find your Stop ID
 Use the official [Stop Lookup tool](https://www.trafiklab.se/api/our-apis/trafiklab-realtime-apis/stop-lookup):
+1. Enter your API key and search for your stop.
+2. Look for the `stop_group -> id` (usually a 9-digit number starting with `74`).
 
-1. Enter a stop name (e.g., “Sundsvall”, “Stockholm”).
-2. Enter your API key and click **Try it out**.
-3. Open the generated URL and copy the **`stop_group -> id`** value (e.g., `"740098000"`).
-
----
-
-## ⚙️ Configuration (UI)
-
-1. Go to **Settings → Devices & Services → Add Integration**.
-2. Search for **Kollektivtrafik Sverige**.
-3. Enter your **API key** and **Stop ID**.
-4. Configure optional filters and **Time Windows**.
-
-The integration creates **six sensors**:
-
-- `sensor.[stop_name]_1` ... to `_5` (Names update dynamically based on the bus line).
-- `sensor.[stop_name]_api_quota_usage` (Tracks your daily API spend)
+### 3. Add the Integration
+1. In Home Assistant, go to **Settings → Devices & Services**.
+2. Click **Add Integration** and search for **Kollektivtrafik Sverige**.
+3. Enter your **API Key** and **Stop ID**.
+4. (Optional) Configure **Line Filters** (e.g., `1, 4, 172`) or **Time Windows**.
 
 ---
 
-## ⏱️ Sensor Behavior
+## 🛠️ How it Works: Smart Polling
 
-**State:** Minutes until departure (integer) or a Timestamp (ISO string).
-**Attributes:**
+This integration is designed to be "set and forget." It manages your API quota automatically:
 
-- `line`, `destination`, `direction`: Current trip details.
-- `scheduled_time`, `expected_time`: Planned vs. estimated times.
-- `transport_mode`, `deviations`: Type of vehicle and any active delays/notices.
-- `next_poll_seconds`: Seconds until the next scheduled API refresh.
-- `api_quota_usage`: (Only on Quota sensor) Percentage of daily allowance used.
-- `throttle_factor`: Current polling speed multiplier (e.g., `1.5` means polling is slowed down to save budget).
+| Mode | Description |
+| :--- | :--- |
+| **Normal** | High-precision updates when departures are imminent. |
+| **Conservative** | Polling slowed down by 50% as you approach hourly budget limits. |
+| **Throttled** | Polling slowed down by 100% if the daily budget is at risk. |
+| **Low Power** | API calls are paused outside of your defined **Time Windows**. |
 
----
+### Global Diagnostics Device
+The integration creates a special **Global Diagnostics** device that tracks the health and usage of the entire integration across all configured stops.
 
-## 🏗️ Architecture & Quotas
-
-This integration uses a multi-layered polling strategy to manage the Trafiklab Bronze Tier (100k monthly calls) automatically.
-
-- **Dynamic Budgeting:** Calculates a daily "fair share" per stop based on the 3,300 total daily call limit.
-- **Throttling:** If usage exceeds the fair share, the polling interval is automatically doubled until the budget recovers.
-- **Reactive Polling:** Speeds up when a departure is within 5 minutes and slows down during long service gaps.
-- **Time Windows:** Completely pauses API requests outside of user-defined hours.
-- **Efficiency:** A single API request updates all 5 departure sensors and the quota sensor simultaneously.
+- **Global API Quota Usage**: A sensor showing the percentage of your daily allowance used.
+- **Attributes**: Displays active stop count, aggregate throttle factor, and service gap detection.
 
 ---
 
-## 🛠️ Troubleshooting
+## 📋 Sensor Attributes
 
-- **"Invalid API key":** Ensure it is specifically for the *Trafiklab Realtime API*.
-- **"Invalid stop ID":** Ensure you used the *stop_group ID*, not a child/platform ID.
-- **No departures shown:** Check your filters or verify the stop on the Trafiklab status page.
-- **Status "Unavailable":** Likely a quota limit or temporary network issue; it will recover automatically.
+Every departure sensor provides rich metadata for your cards:
+
+- `line`: The bus/train line number.
+- `destination`: Final stop of the trip.
+- `expected_time`: The real-time estimated departure.
+- `scheduled_time`: The planned time according to the timetable.
+- `deviations`: Detailed list of any delays or service changes.
+- `transport_mode`: Icon-compatible vehicle type (BUS, TRAIN, METRO, etc.).
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! If you find a bug or have a feature request, please open an issue or a pull request.
 
 ---
 
 ## 📄 License
 
-  This project is licensed under the **Mozilla Public License 2.0 (MPL‑2.0)**.
-See the `LICENSE` file for details.
+This project is licensed under the **Mozilla Public License 2.0 (MPL‑2.0)**. See the [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  <i>Developed with ❤️ for the Home Assistant community.</i>
+</p>
