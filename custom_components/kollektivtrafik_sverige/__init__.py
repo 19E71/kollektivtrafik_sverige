@@ -45,8 +45,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kollektivtrafik Sverige from a config entry.
 
     This setup creates one coordinator per stop loaded from entry.options["stops"].
-    All coordinators for this entry are stored in:
-        hass.data[DOMAIN][entry.entry_id]["coordinators"]
     """
     # 1. Initialize shared data
     hass.data.setdefault(DOMAIN, {})
@@ -54,19 +52,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "global",
         {"per_stop": {}, "sensor_created": False, "sensor": None, "device_info": None},
     )
-    
+
     # Guarantee a clean slate for this entry
     entry_data = {"coordinators": {}}
     hass.data[DOMAIN][entry.entry_id] = entry_data
 
     # 2. Get API key and stops
+    # We pull stops strictly from options as they are managed via the Options Flow
     api_key = entry.data[CONF_API_KEY]
     stops = entry.options.get("stops", [])
 
     # 3. Update active stop count across all entries
     hass.data[DOMAIN]["active_stop_count"] = _count_active_stops(hass)
 
-    # 4. Create global diagnostics device info attached to the integration once.
+    # 4. Create global diagnostics device info
     if global_data.get("device_info") is None:
         global_data["device_info"] = DeviceInfo(
             identifiers={(DOMAIN, "global_diagnostics")},
@@ -84,6 +83,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinators[stop_id] = coordinator
 
     # 6. Listen for option changes
+    # This MUST be here so that clicking 'Submit' in the options flow
+    # triggers the reload logic below.
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     # 7. Forward entry setup to platforms
@@ -105,19 +106,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dev_reg = dr.async_get(hass)
         ent_reg = er.async_get(hass)
 
-        # 1. Remove ALL per-stop devices for this entry based on loaded coordinators
+        # 1. Remove ALL per-stop devices for this entry
         for stop_id in list(entry_coordinators.keys()):
-            # Remove per-stop device
             device = dev_reg.async_get_device(
                 identifiers={(DOMAIN, f"{entry.entry_id}_{stop_id}")}
             )
             if device:
                 dev_reg.async_remove_device(device.id)
-            
-            # Remove stale per-stop diagnostics
+
             global_data.get("per_stop", {}).pop(stop_id, None)
 
-        # 2. Unregister entry coordinators from global sensor if it exists
+        # 2. Unregister entry coordinators from global sensor
         global_sensor = global_data.get("sensor")
         if global_sensor is not None and entry_coordinators:
             if hasattr(global_sensor, "unregister_coordinators"):
@@ -130,27 +129,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if config_entry.entry_id != entry.entry_id
         ]
 
-        # 4. If no other entries, remove global sensor device and reset global state
+        # 4. Cleanup global resources if this is the last entry
         if not other_entries:
-            # Remove the global diagnostics sensor entity
             if global_sensor and getattr(global_sensor, "entity_id", None):
                 ent_reg.async_remove(global_sensor.entity_id)
 
-            # Remove global diagnostics device from registry
             global_device = dev_reg.async_get_device(
                 identifiers={(DOMAIN, "global_diagnostics")}
             )
             if global_device:
                 dev_reg.async_remove_device(global_device.id)
-            
-            # Clear all domain data
+
             hass.data.pop(DOMAIN, None)
         else:
-            # 5. Clean up this entry's data
             if entry.entry_id in domain_data:
                 domain_data.pop(entry.entry_id, None)
 
-            # 6. Update active stop count
             if DOMAIN in hass.data:
                 hass.data[DOMAIN]["active_stop_count"] = _count_active_stops(hass)
 

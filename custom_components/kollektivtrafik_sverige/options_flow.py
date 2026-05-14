@@ -33,10 +33,12 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
     """Handle options flow for managing stops."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
         super().__init__()
-        self._config_entry = (
-            config_entry  # FIXED: cannot assign to config_entry property
-        )
+        self._config_entry = config_entry
+        # Load existing stops into a local list to prevent "ghost deletions"
+        # during editing. This ensures we work with a stable copy of the data.
+        self._stops = list(config_entry.options.get("stops", []))
         self._selected_stop_id: str | None = None
         self._selected_stop_name: str | None = None
         self._search_results: list[dict[str, Any]] = []
@@ -48,15 +50,13 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
         return self.async_show_menu(
             step_id="init",
             menu_options=["add_stop", "edit_stop", "remove_stop"],
-            description_placeholders={
-                "current_stops": str(len(self._config_entry.options.get("stops", [])))
-            },
+            description_placeholders={"current_stops": str(len(self._stops))},
         )
 
     async def async_step_add_stop(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step to add a new stop."""
+        """Step to search for and select a new stop."""
         if user_input is not None:
             # User selected a stop from search results
             if "selected_stop" in user_input:
@@ -133,7 +133,6 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                         description_placeholders={"stop_lookup_link": STOP_LOOKUP_LINK},
                     )
 
-        # Initial search form
         return self.async_show_form(
             step_id="add_stop",
             data_schema=vol.Schema({vol.Required("search_query"): str}),
@@ -143,7 +142,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
     async def async_step_stop_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Configure stop details."""
+        """Configure stop details for a new stop."""
         if user_input is not None:
             stop_config = {
                 "id": str(uuid.uuid4()),
@@ -153,12 +152,12 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 CONF_DIRECTION_FILTER: user_input.get(CONF_DIRECTION_FILTER, ""),
             }
 
-            stops = list(self._config_entry.options.get("stops", []))
-            stops.append(stop_config)
+            self._stops.append(stop_config)
 
+            # CORRECT: No await here. This returns a boolean.
             self.hass.config_entries.async_update_entry(
                 self._config_entry,
-                options={**self._config_entry.options, "stops": stops},
+                options={**self._config_entry.options, "stops": self._stops},
             )
 
             return self.async_create_entry(title="", data={})
@@ -180,20 +179,19 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
     async def async_step_edit_stop(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Select stop to edit."""
-        stops = self._config_entry.options.get("stops", [])
-        if not stops:
+        """Select existing stop to edit."""
+        if not self._stops:
             return self.async_abort(reason="no_stops_to_edit")
 
         if user_input is not None:
             selected_index = int(user_input["selected_stop"])
-            if 0 <= selected_index < len(stops):
-                self._selected_stop_id = stops[selected_index]["id"]
+            if 0 <= selected_index < len(self._stops):
+                self._selected_stop_id = self._stops[selected_index]["id"]
                 return await self.async_step_edit_stop_config()
 
         select_options = {
             str(idx): stop.get("name", f"Stop {idx + 1}")
-            for idx, stop in enumerate(stops)
+            for idx, stop in enumerate(self._stops)
         }
 
         return self.async_show_form(
@@ -206,15 +204,21 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
     async def async_step_edit_stop_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit selected stop."""
-        stops = [dict(item) for item in self._config_entry.options.get("stops", [])]
-        stop = next((s for s in stops if s["id"] == self._selected_stop_id), None)
+        """Edit the selected stop configuration."""
+        # Find stop in our local list
+        stop_index = next(
+            (i for i, s in enumerate(self._stops) if s["id"] == self._selected_stop_id),
+            None,
+        )
 
-        if stop is None:
+        if stop_index is None:
             return self.async_abort(reason="stop_not_found")
 
+        stop = self._stops[stop_index]
+
         if user_input is not None:
-            stop.update(
+            # Update the item in our local list
+            self._stops[stop_index].update(
                 {
                     "name": user_input.get("name", stop.get("name", "Stop")),
                     CONF_LINE_FILTER: user_input.get(
@@ -226,9 +230,10 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 }
             )
 
+            # CORRECT: No await here.
             self.hass.config_entries.async_update_entry(
                 self._config_entry,
-                options={**self._config_entry.options, "stops": stops},
+                options={**self._config_entry.options, "stops": self._stops},
             )
 
             return self.async_create_entry(title="", data={})
@@ -252,26 +257,26 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
     async def async_step_remove_stop(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Remove a stop."""
-        stops = list(self._config_entry.options.get("stops", []))
-        if not stops:
+        """Remove a stop from the configuration."""
+        if not self._stops:
             return self.async_abort(reason="no_stops_to_remove")
 
         if user_input is not None:
             selected_index = int(user_input["selected_stop"])
-            if 0 <= selected_index < len(stops):
-                stops.pop(selected_index)
+            if 0 <= selected_index < len(self._stops):
+                self._stops.pop(selected_index)
 
+                # CORRECT: No await here.
                 self.hass.config_entries.async_update_entry(
                     self._config_entry,
-                    options={**self._config_entry.options, "stops": stops},
+                    options={**self._config_entry.options, "stops": self._stops},
                 )
 
                 return self.async_create_entry(title="", data={})
 
         select_options = {
             str(idx): stop.get("name", f"Stop {idx + 1}")
-            for idx, stop in enumerate(stops)
+            for idx, stop in enumerate(self._stops)
         }
 
         return self.async_show_form(
