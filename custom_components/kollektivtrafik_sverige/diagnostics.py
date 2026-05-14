@@ -32,16 +32,19 @@ async def async_get_config_entry_diagnostics(
 
     # 1. Fetch relevant objects from hass.data
     domain_data = hass.data.get(DOMAIN, {})
-    coordinator = domain_data.get("instances", {}).get(entry.entry_id)
+    coordinators = domain_data.get(entry.entry_id, {}).get("coordinators", {})
     global_data = domain_data.get("global", {})
     per_stop_diagnostics = global_data.get("per_stop", {})
-    entry_per_stop = per_stop_diagnostics.get(entry.entry_id, {})
+    entry_per_stop = {
+        stop_id: per_stop_diagnostics.get(stop_id, {})
+        for stop_id in coordinators.keys()
+    }
 
     # 2. Integration metadata
     integration = await async_get_integration(hass, DOMAIN)
 
     # 3. Calculate Global Aggregations (matches logic in sensor_global.py)
-    instances = domain_data.get("instances", {}).values()
+    instances = coordinators.values()
     all_stop_stats = per_stop_diagnostics.values()
 
     aggregated_throttle = max(
@@ -56,7 +59,9 @@ async def async_get_config_entry_diagnostics(
         default=None,
     )
     aggregated_service_gap = any(item.get("service_gap") for item in all_stop_stats)
-    aggregated_time_window = any(item.get("time_window_active") for item in all_stop_stats)
+    aggregated_time_window = any(
+        item.get("time_window_active") for item in all_stop_stats
+    )
     aggregated_filtered_departures = sum(
         item.get("filtered_departures", 0) for item in all_stop_stats
     )
@@ -74,30 +79,35 @@ async def async_get_config_entry_diagnostics(
             "options": async_redact_data(entry.options, TO_REDACT),
             "unique_id": entry.unique_id,
         },
-        "coordinator": {
-            "last_update_success": coordinator.last_update_success if coordinator else None,
-            "last_exception": (
-                str(coordinator.last_exception)
-                if coordinator and coordinator.last_exception
-                else None
-            ),
-            "departures_count": (
-                len(coordinator.data.get("departures", []))
-                if coordinator and coordinator.data
-                else 0
-            ),
-            "next_poll_seconds": (
-                coordinator.data.get("next_poll_seconds")
-                if coordinator and coordinator.data
-                else None
-            ),
-            "filtered_departures": entry_per_stop.get("filtered_departures"),
-            "service_gap": entry_per_stop.get("service_gap"),
-            "time_window_active": entry_per_stop.get("time_window_active"),
-            "polling_mode": entry_per_stop.get("polling_mode"),
-            "throttle_factor": (
-                coordinator.quota.throttle_factor() if coordinator else None
-            ),
+        "coordinators": {
+            stop_id: {
+                "last_update_success": coordinator.last_update_success,
+                "last_exception": (
+                    str(coordinator.last_exception)
+                    if coordinator.last_exception
+                    else None
+                ),
+                "departures_count": (
+                    len(coordinator.data.get("departures", []))
+                    if coordinator.data
+                    else 0
+                ),
+                "next_poll_seconds": (
+                    coordinator.data.get("next_poll_seconds")
+                    if coordinator.data
+                    else None
+                ),
+                "filtered_departures": entry_per_stop.get(stop_id, {}).get(
+                    "filtered_departures"
+                ),
+                "service_gap": entry_per_stop.get(stop_id, {}).get("service_gap"),
+                "time_window_active": entry_per_stop.get(stop_id, {}).get(
+                    "time_window_active"
+                ),
+                "polling_mode": entry_per_stop.get(stop_id, {}).get("polling_mode"),
+                "throttle_factor": coordinator.quota.throttle_factor(),
+            }
+            for stop_id, coordinator in coordinators.items()
         },
         "global_diagnostics": {
             "active_stop_count": domain_data.get("active_stop_count", 0),
@@ -126,9 +136,11 @@ async def async_get_config_entry_diagnostics(
             }
 
     # 6. Global sensor diagnostics
-    # We locate the global device and list its entities
     dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get_device(identifiers={(DOMAIN, "global")})
+    device = dev_reg.async_get_device(
+        identifiers={(DOMAIN, f"{entry.entry_id}_global")}
+    )
+
     if device:
         global_entities = er.async_entries_for_device(ent_reg, device.id)
         for entity in global_entities:

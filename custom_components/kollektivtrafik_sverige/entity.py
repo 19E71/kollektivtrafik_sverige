@@ -19,21 +19,41 @@ class KollektivtrafikSverigeEntity(CoordinatorEntity):
     """Base class for Kollektivtrafik Sverige entities."""
 
     def __init__(
-        self, coordinator: Any, entry: ConfigEntry, index: int | None = None
+        self,
+        coordinator: Any,
+        entry: ConfigEntry,
+        stop_config: dict[str, Any],
+        index: int | None = None,
     ) -> None:
-        """Initialize the base entity with shared metadata."""
+        """Initialize the base entity with shared metadata.
+
+        Args:
+            coordinator: The update coordinator for this stop
+            entry: The config entry (main entry, not per-stop)
+            stop_config: The stop configuration dict
+            index: Optional index for departure sensors (0-4)
+        """
         super().__init__(coordinator)
         self._entry = entry
+        self._stop_config = stop_config
         self._index = index
+
+        # Create per-stop device info
+        stop_id = stop_config.get("stop_id", "unknown")
+        stop_name = stop_config.get("name", f"Stop {stop_id}")
+        internal_id = stop_config.get("id", "unknown")
+
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            identifiers={(DOMAIN, f"{entry.entry_id}_{internal_id}")},
+            name=stop_name,
             manufacturer="19E71",
             model="Kollektivtrafik Sverige",
+            suggested_area=None,  # User can organize by area
         )
 
         if index is not None:
-            self._attr_unique_id = f"{entry.entry_id}_departure_{index}"
+            # Ensure unique_id is unique per stop and per departure index
+            self._attr_unique_id = f"{entry.entry_id}_{internal_id}_departure_{index}"
 
     @property
     def available(self) -> bool:

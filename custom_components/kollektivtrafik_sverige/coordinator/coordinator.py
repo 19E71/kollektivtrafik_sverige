@@ -10,8 +10,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -35,11 +35,26 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Main orchestrator for Trafiklab realtime departures."""
 
     def __init__(
-        self, hass: HomeAssistant, client: KollektivtrafikApiClient, entry: ConfigEntry
+        self, hass: HomeAssistant, api_key: str, stop_config: dict[str, Any]
     ) -> None:
-        """Initialize the coordinator."""
-        self.entry = entry
-        self.api = client
+        """Initialize the coordinator.
+
+        Args:
+            hass: Home Assistant instance
+            api_key: API key for Trafiklab
+            stop_config: Stop configuration dict containing:
+                - id: Unique internal identifier for this stop
+                - stop_id: The actual stop ID from the API
+                - name: Display name
+                - line_filter: Line filter string
+                - direction_filter: Direction filter string
+                - time_windows: List of time window strings
+        """
+        self.hass = hass
+        self.stop_config = stop_config
+        self.api = KollektivtrafikApiClient(
+            api_key, session=async_get_clientsession(hass)
+        )
 
         self.queue = DepartureQueue()
 
@@ -49,7 +64,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{entry.data[CONF_STOP_ID]}",
+            name=f"{DOMAIN}_{stop_config['stop_id']}",
             # Default interval; adjusted dynamically after the first poll
             update_interval=timedelta(seconds=60),
         )
@@ -75,7 +90,7 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         global_data = self.hass.data.setdefault(DOMAIN, {}).setdefault(
             "global", {"per_stop": {}}
         )
-        global_data["per_stop"][self.entry.entry_id] = {
+        global_data["per_stop"][self.stop_config["id"]] = {
             "last_api_update": now.isoformat(),
             "next_poll_seconds": interval_sec,
             "filtered_departures": filtered_departures,
@@ -87,23 +102,23 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @property
     def stop_id(self) -> str:
-        """Return stop ID from entry data."""
-        return str(self.entry.data[CONF_STOP_ID])
+        """Return stop ID from stop config."""
+        return str(self.stop_config[CONF_STOP_ID])
 
     @property
     def line_filter(self) -> str:
-        """Return line filter from entry options."""
-        return self.entry.options.get(CONF_LINE_FILTER, "")
+        """Return line filter from stop config."""
+        return self.stop_config.get(CONF_LINE_FILTER, "")
 
     @property
     def direction_filter(self) -> str | None:
-        """Return direction filter from entry options."""
-        return self.entry.options.get(CONF_DIRECTION_FILTER)
+        """Return direction filter from stop config."""
+        return self.stop_config.get(CONF_DIRECTION_FILTER)
 
     @property
     def time_windows(self) -> list[str]:
-        """Return time windows from entry options."""
-        return self.entry.options.get(CONF_TIME_WINDOWS, [])
+        """Return time windows from stop config."""
+        return self.stop_config.get(CONF_TIME_WINDOWS, [])
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch, parse, filter, queue, and compute next interval."""

@@ -9,7 +9,6 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import DOMAIN, GLOBAL_DAILY_QUOTA, QUOTA_TARGET_USAGE
 
@@ -43,27 +42,58 @@ class GlobalQuotaSensor(SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_unique_id = "kollektivtrafik_sverige_global_quota"
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        """Initialize the global quota sensor."""
+    def __init__(
+        self, hass: HomeAssistant, coordinators: dict[str, Any] | None = None
+    ) -> None:
+        """Initialize the global quota sensor.
+
+        Args:
+            hass: Home Assistant instance
+            coordinators: Optional dict of coordinators for this entry
+        """
         self._hass = hass
         self._attr_device_info = self._hass.data[DOMAIN]["global"]["device_info"]
         self._listener_cleanup: dict[str, Any] = {}
 
+        # Register initial coordinators if provided
+        if coordinators:
+            self.register_coordinators(coordinators)
+
     def register_coordinator(self, coordinator: Any) -> None:
         """Register a coordinator for update callbacks."""
-        entry_id = coordinator.entry.entry_id
-        if entry_id in self._listener_cleanup:
+        stop_id = coordinator.stop_config.get("id", "unknown")
+        if stop_id in self._listener_cleanup:
             return
 
-        self._listener_cleanup[entry_id] = coordinator.async_add_listener(
+        self._listener_cleanup[stop_id] = coordinator.async_add_listener(
             self._handle_coordinator_update
         )
+
+    def unregister_coordinator(self, coordinator: Any) -> None:
+        """Unregister a coordinator listener."""
+        stop_id = coordinator.stop_config.get("id", "unknown")
+        cleanup = self._listener_cleanup.pop(stop_id, None)
+        if cleanup is not None:
+            cleanup()
+
+    def register_coordinators(self, coordinators: dict[str, Any]) -> None:
+        """Register all coordinators for update callbacks."""
+        for stop_id, coordinator in coordinators.items():
+            self.register_coordinator(coordinator)
+
+    def unregister_coordinators(self, coordinators: dict[str, Any]) -> None:
+        """Unregister a set of coordinators."""
+        for stop_id, coordinator in coordinators.items():
+            self.unregister_coordinator(coordinator)
 
     async def async_added_to_hass(self) -> None:
         """Register currently active coordinators after entity is added."""
         await super().async_added_to_hass()
-        for coordinator in self._hass.data[DOMAIN].get("instances", {}).values():
-            self.register_coordinator(coordinator)
+        # Collect all coordinators from all config entries
+        for entry_id, entry_data in self._hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and "coordinators" in entry_data:
+                for coordinator in entry_data["coordinators"].values():
+                    self.register_coordinator(coordinator)
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up update listeners before removal."""
@@ -76,10 +106,18 @@ class GlobalQuotaSensor(SensorEntity):
         """Refresh sensor state when any coordinator updates."""
         self.async_write_ha_state()
 
+    def _get_all_coordinators(self) -> list[Any]:
+        """Get all coordinators from all config entries."""
+        all_coordinators = []
+        for entry_id, entry_data in self._hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and "coordinators" in entry_data:
+                all_coordinators.extend(entry_data["coordinators"].values())
+        return all_coordinators
+
     @property
     def native_value(self) -> float:
-        trackers = self._hass.data[DOMAIN].get("instances", {}).values()
-        total_calls = sum(coord.quota.calls_last_day() for coord in trackers)
+        all_coordinators = self._get_all_coordinators()
+        total_calls = sum(coord.quota.calls_last_day() for coord in all_coordinators)
         total_safe_quota = int(GLOBAL_DAILY_QUOTA * QUOTA_TARGET_USAGE)
 
         if total_safe_quota == 0:
@@ -94,7 +132,7 @@ class GlobalQuotaSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         global_state = self._hass.data[DOMAIN].get("global", {}).get("per_stop", {})
-        trackers = self._hass.data[DOMAIN].get("instances", {}).values()
+        all_coordinators = self._get_all_coordinators()
 
         next_poll_seconds = min(
             (
@@ -105,13 +143,13 @@ class GlobalQuotaSensor(SensorEntity):
             default=None,
         )
         throttle_factor = max(
-            (coord.quota.throttle_factor() for coord in trackers), default=1.0
+            (coord.quota.throttle_factor() for coord in all_coordinators), default=1.0
         )
         calls_last_hour = max(
-            (coord.quota.calls_last_hour() for coord in trackers), default=0
+            (coord.quota.calls_last_hour() for coord in all_coordinators), default=0
         )
         calls_last_24h = max(
-            (coord.quota.calls_last_day() for coord in trackers), default=0
+            (coord.quota.calls_last_day() for coord in all_coordinators), default=0
         )
         filtered_departures_last_cycle = sum(
             item.get("filtered_departures", 0) for item in global_state.values()
@@ -164,9 +202,7 @@ class GlobalQuotaSensor(SensorEntity):
             "next_poll_minutes": next_poll_minutes,
             "next_poll_seconds": next_poll_seconds,
             "throttle_factor": throttle_factor,
-            "active_stops_sharing_quota": self._hass.data[DOMAIN].get(
-                "active_stop_count", 0
-            ),
+            "active_stops": len(all_coordinators),
             "calls_last_hour": calls_last_hour,
             "calls_last_24h": calls_last_24h,
         }

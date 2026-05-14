@@ -7,106 +7,112 @@
         "data": {
           "api_key": "API Key"
         }
-      },
-      "search": {
-        "title": "Search for Stop",
-        "description": "Search for a public transport stop by name.\n\nYou can also look up stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section and enter your search query.",
-        "data": {
-          "search_query": "Stop Name or ID"
-        }
-      },
-      "select": {
-        "title": "Select Stop",
-        "description": "Select the stop you want to monitor from the search results.",
-        "data": {
-          "selected_stop": "Stop"
-        }
-      },
-      "filters": {
-        "title": "Filters",
-        "description": "Configure line and direction filters. Leave blank to show all departures.",
-        "data": {
-          "line_filter": "Line Filter",
-          "direction_filter": "Direction Filter"
-        }
       }
     },
     "error": {
       "invalid_api_key": "The API key is invalid.",
-      "invalid_search": "Please enter a stop name or ID to search.",
-      "no_results": "No stops found. Please try a different search term.",
-      "cannot_connect": "Unable to connect to the API."
+      "cannot_connect": "Unable to connect to the API.",
+      "unknown_error": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This stop and line combination is already configured."
+      "single_instance_allowed": "Only one configuration of this integration is allowed."
     }
   },
+
   "options": {
     "step": {
       "init": {
-        "title": "Options",
-        "description": "Update filters and time windows.",
+        "title": "Manage Stops",
+        "description": "You currently have {current_stops} configured stops.",
+        "menu_options": {
+          "add_stop": "Add Stop",
+          "edit_stop": "Edit Stop",
+          "remove_stop": "Remove Stop"
+        }
+      },
+
+      "add_stop": {
+        "title": "Add Stop",
+        "description": "Search for a public transport stop by name.\n\nYou can also look up stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section and enter your search query.",
         "data": {
+          "search_query": "Stop Name or ID",
+          "selected_stop": "Stop"
+        }
+      },
+
+      "stop_config": {
+        "title": "Configure Stop",
+        "description": "Set the name and configure line and direction filters. Leave filters blank to show all departures.",
+        "data": {
+          "name": "Stop Name",
           "line_filter": "Line Filter",
           "direction_filter": "Direction Filter"
         }
+      },
+
+      "edit_stop": {
+        "title": "Select Stop to Edit",
+        "data": {
+          "selected_stop": "Stop"
+        }
+      },
+
+      "edit_stop_config": {
+        "title": "Edit Stop Configuration",
+        "description": "Update the stop name and filters.",
+        "data": {
+          "name": "Stop Name",
+          "line_filter": "Line Filter",
+          "direction_filter": "Direction Filter"
+        }
+      },
+
+      "remove_stop": {
+        "title": "Select Stop to Remove",
+        "description": "This action cannot be undone.",
+        "data": {
+          "selected_stop": "Stop"
+        }
       }
+    },
+
+    "error": {
+      "invalid_search": "Please enter a stop name or ID to search.",
+      "no_results": "No stops found. Please try a different search term.",
+      "connection_error": "Unable to connect to the API.",
+      "unknown_error": "An unexpected error occurred."
+    },
+
+    "abort": {
+      "no_stops_to_edit": "No stops configured. Add a stop first.",
+      "no_stops_to_remove": "No stops configured.",
+      "stop_not_found": "The selected stop was not found."
     }
   },
+
   "entity": {
     "sensor": {
-      "departure_1": {
-        "name": "Departure 1"
-      },
-      "departure_2": {
-        "name": "Departure 2"
-      },
-      "departure_3": {
-        "name": "Departure 3"
-      },
-      "departure_4": {
-        "name": "Departure 4"
-      },
-      "departure_5": {
-        "name": "Departure 5"
-      },
-      "api_quota_usage": {
-        "name": "API Quota Usage"
-      }
+      "departure_1": { "name": "Departure 1" },
+      "departure_2": { "name": "Departure 2" },
+      "departure_3": { "name": "Departure 3" },
+      "departure_4": { "name": "Departure 4" },
+      "departure_5": { "name": "Departure 5" },
+      "api_quota_usage": { "name": "API Quota Usage" }
     }
   },
+
   "entityAttributes": {
     "sensor": {
-      "line": {
-        "name": "Line"
-      },
-      "destination": {
-        "name": "Destination"
-      },
-      "direction": {
-        "name": "Direction"
-      },
-      "expected_time": {
-        "name": "Expected Time"
-      },
-      "scheduled_time": {
-        "name": "Scheduled Time"
-      },
-      "minutes": {
-        "name": "Minutes Until Departure"
-      },
-      "timestamp": {
-        "name": "Departure Timestamp"
-      },
-      "transport_mode": {
-        "name": "Transport Mode"
-      },
-      "deviations": {
-        "name": "Deviations"
-      },
-      "summary_deviation": {
-        "name": "Deviation Summary"
-      }
+      "line": { "name": "Line" },
+      "destination": { "name": "Destination" },
+      "direction": { "name": "Direction" },
+      "expected_time": { "name": "Expected Time" },
+      "scheduled_time": { "name": "Scheduled Time" },
+      "minutes": { "name": "Minutes Until Departure" },
+      "timestamp": { "name": "Departure Timestamp" },
+      "transport_mode": { "name": "Transport Mode" },
+      "deviations": { "name": "Deviations" },
+      "summary_deviation": { "name": "Deviation Summary" }
     }
   }
 }

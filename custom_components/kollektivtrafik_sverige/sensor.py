@@ -34,6 +34,7 @@ from .const import (
     TRANSPORT_MODE_ICONS,
     DEFAULT_TRANSPORT_ICON,
 )
+from .coordinator.polling import _in_time_window
 from .entity import KollektivtrafikSverigeEntity
 from .sensor_global import GlobalQuotaSensor
 
@@ -43,26 +44,34 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up sensors from config entry."""
-    # Note: Accessing via "instances" sub-key as defined in your new __init__.py
-    coordinator = hass.data[DOMAIN]["instances"][entry.entry_id]
+    """Set up sensors from config entry.
+
+    For each stop in the entry, creates 5 departure sensors.
+    Also sets up the global quota sensor once.
+    """
+    # Get all coordinators for this entry
+    coordinators = hass.data[DOMAIN][entry.entry_id].get("coordinators", {})
 
     entities: list[SensorEntity] = []
 
-    # Add the 5 departure sensors
-    entities.extend(DepartureSensor(coordinator, entry, index) for index in range(5))
+    # Create 5 departure sensors for each coordinator (stop)
+    for stop_id, coordinator in coordinators.items():
+        for index in range(5):
+            entities.append(
+                DepartureSensor(coordinator, entry, coordinator.stop_config, index)
+            )
 
     # Add the global quota sensor only once
     global_data = hass.data[DOMAIN]["global"]
     if not global_data.get("sensor_created"):
-        global_sensor = GlobalQuotaSensor(hass)
+        global_sensor = GlobalQuotaSensor(hass, coordinators)
         entities.append(global_sensor)
         global_data["sensor_created"] = True
         global_data["sensor"] = global_sensor
     else:
         global_sensor = global_data.get("sensor")
         if global_sensor is not None:
-            global_sensor.register_coordinator(coordinator)
+            global_sensor.register_coordinators(coordinators)
 
     async_add_entities(entities)
 
@@ -72,9 +81,15 @@ class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
+    def __init__(
+        self,
+        coordinator: Any,
+        entry: ConfigEntry,
+        stop_config: dict[str, Any],
+        index: int,
+    ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, index)
+        super().__init__(coordinator, entry, stop_config, index)
 
     @property
     def icon(self) -> str | None:
@@ -95,9 +110,6 @@ class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
         if not data:
             # Check if we are currently inside an active polling window
             # using the logic we already have in the coordinator
-            from .coordinator.polling import _in_time_window
-            from homeassistant.util import dt as dt_util
-
             is_active = _in_time_window(dt_util.now(), self.coordinator.time_windows)
 
             if is_active:
