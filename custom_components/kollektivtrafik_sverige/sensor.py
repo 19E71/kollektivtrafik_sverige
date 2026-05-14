@@ -16,6 +16,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -61,16 +62,26 @@ async def async_setup_entry(
                 DepartureSensor(coordinator, entry, coordinator.stop_config, index)
             )
 
-    # Add the global quota sensor only once
+    # Add the global quota sensor
     global_data = hass.data[DOMAIN]["global"]
-    if not global_data.get("sensor_created"):
+    global_sensor = global_data.get("sensor")
+    ent_reg = er.async_get(hass)
+
+    # Check if global sensor is already in the entity registry
+    global_sensor_entity_id = "sensor.kollektivtrafik_sverige_global_api_quota_usage"
+    global_sensor_exists_in_registry = (
+        global_sensor_entity_id in ent_reg.entities if ent_reg.entities else False
+    )
+
+    # If sensor doesn't exist in registry or object is None, create new one
+    if not global_sensor_exists_in_registry or global_sensor is None:
         global_sensor = GlobalQuotaSensor(hass, coordinators)
         entities.append(global_sensor)
         global_data["sensor_created"] = True
         global_data["sensor"] = global_sensor
     else:
-        global_sensor = global_data.get("sensor")
-        if global_sensor is not None:
+        # Sensor exists in registry, just update coordinator registrations
+        if hasattr(global_sensor, "register_coordinators"):
             global_sensor.register_coordinators(coordinators)
 
     async_add_entities(entities)

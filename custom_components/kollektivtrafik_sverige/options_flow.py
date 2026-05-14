@@ -38,6 +38,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             config_entry  # FIXED: cannot assign to config_entry property
         )
         self._selected_stop_id: str | None = None
+        self._selected_stop_name: str | None = None
         self._search_results: list[dict[str, Any]] = []
 
     async def async_step_init(
@@ -63,6 +64,11 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 if 0 <= selected_index < len(self._search_results):
                     selected_stop = self._search_results[selected_index]
                     self._selected_stop_id = selected_stop.get("id")
+                    self._selected_stop_name = (
+                        selected_stop.get("name")
+                        or selected_stop.get("group_name")
+                        or "Stop"
+                    )
                     return await self.async_step_stop_config()
 
             # User submitted a search query
@@ -142,7 +148,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             stop_config = {
                 "id": str(uuid.uuid4()),
                 "stop_id": self._selected_stop_id,
-                "name": user_input.get("name", "Stop"),
+                "name": user_input.get("name") or self._selected_stop_name or "Stop",
                 CONF_LINE_FILTER: user_input.get(CONF_LINE_FILTER, ""),
                 CONF_DIRECTION_FILTER: user_input.get(CONF_DIRECTION_FILTER, ""),
             }
@@ -161,7 +167,10 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             step_id="stop_config",
             data_schema=vol.Schema(
                 {
-                    vol.Optional("name", default="Stop"): str,
+                    vol.Optional(
+                        "name",
+                        default=self._selected_stop_name or "Stop",
+                    ): str,
                     vol.Optional(CONF_LINE_FILTER, default=""): str,
                     vol.Optional(CONF_DIRECTION_FILTER, default=""): str,
                 }
