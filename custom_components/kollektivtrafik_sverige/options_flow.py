@@ -34,7 +34,9 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         super().__init__()
-        self.config_entry = config_entry
+        self._config_entry = (
+            config_entry  # FIXED: cannot assign to config_entry property
+        )
         self._selected_stop_id: str | None = None
         self._search_results: list[dict[str, Any]] = []
 
@@ -46,7 +48,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             step_id="init",
             menu_options=["add_stop", "edit_stop", "remove_stop"],
             description_placeholders={
-                "current_stops": str(len(self.config_entry.options.get("stops", [])))
+                "current_stops": str(len(self._config_entry.options.get("stops", [])))
             },
         )
 
@@ -76,7 +78,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
 
                 try:
                     client = KollektivtrafikApiClient(
-                        self.config_entry.data[CONF_API_KEY],
+                        self._config_entry.data[CONF_API_KEY],
                         session=async_get_clientsession(self.hass),
                     )
                     self._search_results = await client.search_stops(search_value)
@@ -145,12 +147,12 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 CONF_DIRECTION_FILTER: user_input.get(CONF_DIRECTION_FILTER, ""),
             }
 
-            stops = list(self.config_entry.options.get("stops", []))
+            stops = list(self._config_entry.options.get("stops", []))
             stops.append(stop_config)
 
             await self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                options={**self.config_entry.options, "stops": stops},
+                self._config_entry,
+                options={**self._config_entry.options, "stops": stops},
             )
 
             return self.async_create_entry(title="", data={})
@@ -170,7 +172,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Select stop to edit."""
-        stops = self.config_entry.options.get("stops", [])
+        stops = self._config_entry.options.get("stops", [])
         if not stops:
             return self.async_abort(reason="no_stops_to_edit")
 
@@ -196,7 +198,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Edit selected stop."""
-        stops = [dict(item) for item in self.config_entry.options.get("stops", [])]
+        stops = [dict(item) for item in self._config_entry.options.get("stops", [])]
         stop = next((s for s in stops if s["id"] == self._selected_stop_id), None)
 
         if stop is None:
@@ -216,8 +218,8 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             )
 
             await self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                options={**self.config_entry.options, "stops": stops},
+                self._config_entry,
+                options={**self._config_entry.options, "stops": stops},
             )
 
             return self.async_create_entry(title="", data={})
@@ -242,7 +244,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Remove a stop."""
-        stops = list(self.config_entry.options.get("stops", []))
+        stops = list(self._config_entry.options.get("stops", []))
         if not stops:
             return self.async_abort(reason="no_stops_to_remove")
 
@@ -252,8 +254,8 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 stops.pop(selected_index)
 
                 await self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    options={**self.config_entry.options, "stops": stops},
+                    self._config_entry,
+                    options={**self._config_entry.options, "stops": stops},
                 )
 
                 return self.async_create_entry(title="", data={})
