@@ -156,7 +156,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             stops = list(self._config_entry.options.get("stops", []))
             stops.append(stop_config)
 
-            await self.hass.config_entries.async_update_entry(
+            self.hass.config_entries.async_update_entry(
                 self._config_entry,
                 options={**self._config_entry.options, "stops": stops},
             )
@@ -226,7 +226,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 }
             )
 
-            await self.hass.config_entries.async_update_entry(
+            self.hass.config_entries.async_update_entry(
                 self._config_entry,
                 options={**self._config_entry.options, "stops": stops},
             )
@@ -262,7 +262,7 @@ class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
             if 0 <= selected_index < len(stops):
                 stops.pop(selected_index)
 
-                await self.hass.config_entries.async_update_entry(
+                self.hass.config_entries.async_update_entry(
                     self._config_entry,
                     options={**self._config_entry.options, "stops": stops},
                 )
