@@ -9,13 +9,20 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import DOMAIN, CONF_API_KEY
 from .coordinator import KollektivtrafikSverigeCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+# This integration is configured only through config entries (UI)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

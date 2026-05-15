@@ -116,40 +116,5 @@
         "name": "API Quota Usage"
       }
     }
-  },
-
-  "entityAttributes": {
-    "sensor": {
-      "line": {
-        "name": "Line"
-      },
-      "destination": {
-        "name": "Destination"
-      },
-      "direction": {
-        "name": "Direction"
-      },
-      "expected_time": {
-        "name": "Expected Time"
-      },
-      "scheduled_time": {
-        "name": "Scheduled Time"
-      },
-      "minutes": {
-        "name": "Minutes Until Departure"
-      },
-      "timestamp": {
-        "name": "Departure Timestamp"
-      },
-      "transport_mode": {
-        "name": "Transport Mode"
-      },
-      "deviations": {
-        "name": "Deviations"
-      },
-      "summary_deviation": {
-        "name": "Deviation Summary"
-      }
-    }
   }
 }
