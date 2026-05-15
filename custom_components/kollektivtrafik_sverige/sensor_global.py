@@ -9,6 +9,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN, GLOBAL_DAILY_QUOTA, QUOTA_TARGET_USAGE
 
@@ -33,29 +34,17 @@ def _quota_icon(percent: float) -> str:
     return "mdi:alert-circle-outline"
 
 
-class GlobalQuotaSensor(SensorEntity):
-    """Global quota sensor for integration-wide diagnostics."""
+class GlobalDiagnosticSensor(SensorEntity):
+    """Base class for global diagnostic sensors."""
 
     _attr_has_entity_name = True
-    _attr_name = "Global API Quota Usage"
-    _attr_native_unit_of_measurement = "%"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_unique_id = "kollektivtrafik_sverige_global_quota"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(
-        self, hass: HomeAssistant, coordinators: dict[str, Any] | None = None
-    ) -> None:
-        """Initialize the global quota sensor.
-
-        Args:
-            hass: Home Assistant instance
-            coordinators: Optional dict of coordinators for this entry
-        """
+    def __init__(self, hass: HomeAssistant, coordinators: dict[str, Any] | None = None) -> None:
         self._hass = hass
         self._attr_device_info = self._hass.data[DOMAIN]["global"]["device_info"]
         self._listener_cleanup: dict[str, Any] = {}
 
-        # Register initial coordinators if provided
         if coordinators:
             self.register_coordinators(coordinators)
 
@@ -78,19 +67,18 @@ class GlobalQuotaSensor(SensorEntity):
 
     def register_coordinators(self, coordinators: dict[str, Any]) -> None:
         """Register all coordinators for update callbacks."""
-        for stop_id, coordinator in coordinators.items():
+        for coordinator in coordinators.values():
             self.register_coordinator(coordinator)
 
     def unregister_coordinators(self, coordinators: dict[str, Any]) -> None:
         """Unregister a set of coordinators."""
-        for stop_id, coordinator in coordinators.items():
+        for coordinator in coordinators.values():
             self.unregister_coordinator(coordinator)
 
     async def async_added_to_hass(self) -> None:
         """Register currently active coordinators after entity is added."""
         await super().async_added_to_hass()
-        # Collect all coordinators from all config entries
-        for entry_id, entry_data in self._hass.data.get(DOMAIN, {}).items():
+        for entry_data in self._hass.data.get(DOMAIN, {}).values():
             if isinstance(entry_data, dict) and "coordinators" in entry_data:
                 for coordinator in entry_data["coordinators"].values():
                     self.register_coordinator(coordinator)
@@ -108,11 +96,20 @@ class GlobalQuotaSensor(SensorEntity):
 
     def _get_all_coordinators(self) -> list[Any]:
         """Get all coordinators from all config entries."""
-        all_coordinators = []
-        for entry_id, entry_data in self._hass.data.get(DOMAIN, {}).items():
+        all_coordinators: list[Any] = []
+        for entry_data in self._hass.data.get(DOMAIN, {}).values():
             if isinstance(entry_data, dict) and "coordinators" in entry_data:
                 all_coordinators.extend(entry_data["coordinators"].values())
         return all_coordinators
+
+
+class GlobalQuotaSensor(GlobalDiagnosticSensor):
+    """Global quota sensor for integration-wide diagnostics."""
+
+    _attr_name = "Global API Quota Usage"
+    _attr_native_unit_of_measurement = "%"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_unique_id = "kollektivtrafik_sverige_global_quota"
 
     @property
     def native_value(self) -> float:
@@ -134,25 +131,8 @@ class GlobalQuotaSensor(SensorEntity):
         global_state = self._hass.data[DOMAIN].get("global", {}).get("per_stop", {})
         all_coordinators = self._get_all_coordinators()
 
-        next_poll_seconds = min(
-            (
-                item.get("next_poll_seconds")
-                for item in global_state.values()
-                if item.get("next_poll_seconds") is not None
-            ),
-            default=None,
-        )
         throttle_factor = max(
             (coord.quota.throttle_factor() for coord in all_coordinators), default=1.0
-        )
-        calls_last_hour = max(
-            (coord.quota.calls_last_hour() for coord in all_coordinators), default=0
-        )
-        calls_last_24h = max(
-            (coord.quota.calls_last_day() for coord in all_coordinators), default=0
-        )
-        filtered_departures_last_cycle = sum(
-            item.get("filtered_departures", 0) for item in global_state.values()
         )
         service_gap_detected = any(
             item.get("service_gap") for item in global_state.values()
@@ -169,10 +149,6 @@ class GlobalQuotaSensor(SensorEntity):
             default=None,
         )
         percent_used = self.native_value
-        if next_poll_seconds is not None:
-            next_poll_minutes = int(next_poll_seconds // 60)
-        else:
-            next_poll_minutes = None
 
         if percent_used >= 100:
             quota_status = "critical"
@@ -197,12 +173,90 @@ class GlobalQuotaSensor(SensorEntity):
             "polling_mode": polling_mode,
             "time_window_active": time_window_active,
             "service_gap_detected": service_gap_detected,
-            "filtered_departures_last_cycle": filtered_departures_last_cycle,
             "last_api_update": last_api_update,
-            "next_poll_minutes": next_poll_minutes,
-            "next_poll_seconds": next_poll_seconds,
-            "throttle_factor": throttle_factor,
             "active_stops": len(all_coordinators),
-            "calls_last_hour": calls_last_hour,
-            "calls_last_24h": calls_last_24h,
         }
+
+
+class NextPollSecondsSensor(GlobalDiagnosticSensor):
+    """Global sensor for next poll interval."""
+
+    _attr_name = "Next Poll Seconds"
+    _attr_unique_id = "kollektivtrafik_sverige_next_poll_seconds"
+    _attr_native_unit_of_measurement = "s"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int | None:
+        global_state = self._hass.data[DOMAIN].get("global", {}).get("per_stop", {})
+        return min(
+            (
+                item.get("next_poll_seconds")
+                for item in global_state.values()
+                if item.get("next_poll_seconds") is not None
+            ),
+            default=None,
+        )
+
+
+class ThrottleFactorSensor(GlobalDiagnosticSensor):
+    """Global sensor for effective throttle factor."""
+
+    _attr_name = "Throttle Factor"
+    _attr_unique_id = "kollektivtrafik_sverige_throttle_factor"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float:
+        return max(
+            (coord.quota.throttle_factor() for coord in self._get_all_coordinators()),
+            default=1.0,
+        )
+
+
+class CallsLastHourSensor(GlobalDiagnosticSensor):
+    """Global sensor for calls in the last hour."""
+
+    _attr_name = "Calls Last Hour"
+    _attr_unique_id = "kollektivtrafik_sverige_calls_last_hour"
+    _attr_native_unit_of_measurement = "calls"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        return max(
+            (coord.quota.calls_last_hour() for coord in self._get_all_coordinators()),
+            default=0,
+        )
+
+
+class CallsLast24hSensor(GlobalDiagnosticSensor):
+    """Global sensor for calls in the last 24 hours."""
+
+    _attr_name = "Calls Last 24 Hours"
+    _attr_unique_id = "kollektivtrafik_sverige_calls_last_24h"
+    _attr_native_unit_of_measurement = "calls"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        return max(
+            (coord.quota.calls_last_day() for coord in self._get_all_coordinators()),
+            default=0,
+        )
+
+
+class FilteredDeparturesLastCycleSensor(GlobalDiagnosticSensor):
+    """Global sensor for filtered departures during the last cycle."""
+
+    _attr_name = "Filtered Departures Last Cycle"
+    _attr_unique_id = "kollektivtrafik_sverige_filtered_departures_last_cycle"
+    _attr_native_unit_of_measurement = "departures"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        return sum(
+            item.get("filtered_departures", 0)
+            for item in self._hass.data[DOMAIN].get("global", {}).get("per_stop", {}).values()
+        )

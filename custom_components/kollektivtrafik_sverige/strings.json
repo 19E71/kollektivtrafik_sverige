@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "API Key",
-        "description": "Enter your Trafiklab Realtime API key.\n\nYou must first create a project here:\n{project_link}\n\nThen enable the 'Trafiklab Realtime APIs' on this page:\n{realtime_api_link}",
+        "description": "Enter your Trafiklab Realtime API key.\n\nYou must first create a project here:\n{project_link}\n\nThen enable 'Trafiklab Realtime APIs' on this page:\n{realtime_api_link}",
         "data": {
           "api_key": "API Key"
         }
@@ -35,14 +35,14 @@
         "title": "Add Stop",
         "description": "Search for a public transport stop by name.\n\nYou can also look up stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section and enter your search query.",
         "data": {
-          "search_query": "Stop Name or ID",
+          "search_query": "Stop Name",
           "selected_stop": "Stop"
         }
       },
 
       "stop_config": {
         "title": "Configure Stop",
-        "description": "Set the name and configure line and direction filters. Leave filters blank to show all departures.",
+        "description": "Set the stop name and configure optional line and direction filters. Leave filters blank to show all departures.",
         "data": {
           "name": "Stop Name",
           "line_filter": "Line Filter",
@@ -52,6 +52,7 @@
 
       "edit_stop": {
         "title": "Select Stop to Edit",
+        "description": "Choose a configured stop to modify.",
         "data": {
           "selected_stop": "Stop"
         }
@@ -68,8 +69,8 @@
       },
 
       "remove_stop": {
-        "title": "Select Stop to Remove",
-        "description": "This action cannot be undone.",
+        "title": "Remove Stop",
+        "description": "Select a stop to remove.\n\nThis action cannot be undone.",
         "data": {
           "selected_stop": "Stop"
         }
@@ -77,42 +78,78 @@
     },
 
     "error": {
-      "invalid_search": "Please enter a stop name or ID to search.",
-      "no_results": "No stops found. Please try a different search term.",
+      "invalid_search": "Please enter a stop name.",
+      "no_results": "No matching stops were found.",
       "connection_error": "Unable to connect to the API.",
       "unknown_error": "An unexpected error occurred."
     },
 
     "abort": {
-      "no_stops_to_edit": "No stops configured. Add a stop first.",
-      "no_stops_to_remove": "No stops configured.",
-      "stop_not_found": "The selected stop was not found."
+      "no_stops_to_edit": "No stops are currently configured.",
+      "no_stops_to_remove": "No stops are currently configured.",
+      "stop_not_found": "The selected stop could not be found.",
+
+      "stop_added": "The stop was added successfully.",
+      "stop_updated": "The stop was updated successfully.",
+      "stop_removed": "The stop was removed successfully."
     }
   },
 
   "entity": {
     "sensor": {
-      "departure_1": { "name": "Departure 1" },
-      "departure_2": { "name": "Departure 2" },
-      "departure_3": { "name": "Departure 3" },
-      "departure_4": { "name": "Departure 4" },
-      "departure_5": { "name": "Departure 5" },
-      "api_quota_usage": { "name": "API Quota Usage" }
+      "departure_1": {
+        "name": "Departure 1"
+      },
+      "departure_2": {
+        "name": "Departure 2"
+      },
+      "departure_3": {
+        "name": "Departure 3"
+      },
+      "departure_4": {
+        "name": "Departure 4"
+      },
+      "departure_5": {
+        "name": "Departure 5"
+      },
+      "api_quota_usage": {
+        "name": "API Quota Usage"
+      }
     }
   },
 
   "entityAttributes": {
     "sensor": {
-      "line": { "name": "Line" },
-      "destination": { "name": "Destination" },
-      "direction": { "name": "Direction" },
-      "expected_time": { "name": "Expected Time" },
-      "scheduled_time": { "name": "Scheduled Time" },
-      "minutes": { "name": "Minutes Until Departure" },
-      "timestamp": { "name": "Departure Timestamp" },
-      "transport_mode": { "name": "Transport Mode" },
-      "deviations": { "name": "Deviations" },
-      "summary_deviation": { "name": "Deviation Summary" }
+      "line": {
+        "name": "Line"
+      },
+      "destination": {
+        "name": "Destination"
+      },
+      "direction": {
+        "name": "Direction"
+      },
+      "expected_time": {
+        "name": "Expected Time"
+      },
+      "scheduled_time": {
+        "name": "Scheduled Time"
+      },
+      "minutes": {
+        "name": "Minutes Until Departure"
+      },
+      "timestamp": {
+        "name": "Departure Timestamp"
+      },
+      "transport_mode": {
+        "name": "Transport Mode"
+      },
+      "deviations": {
+        "name": "Deviations"
+      },
+      "summary_deviation": {
+        "name": "Deviation Summary"
+      }
     }
   }
 }

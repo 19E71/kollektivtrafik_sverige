@@ -26,7 +26,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         {
             "per_stop": {},
             "sensor_created": False,
-            "sensor": None,
+            "global_sensors": [],
             "device_info": None,
         },
     )
@@ -82,11 +82,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_config_entry_first_refresh()
         coordinators[stop_id] = coordinator
 
-    # 6. Listen for option changes
-    # This MUST be here so that clicking 'Submit' in the options flow
-    # triggers the reload logic below.
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
     # 7. Forward entry setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -116,11 +111,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             global_data.get("per_stop", {}).pop(stop_id, None)
 
-        # 2. Unregister entry coordinators from global sensor
-        global_sensor = global_data.get("sensor")
-        if global_sensor is not None and entry_coordinators:
-            if hasattr(global_sensor, "unregister_coordinators"):
-                global_sensor.unregister_coordinators(entry_coordinators)
+        # 2. Unregister entry coordinators from global sensors
+        for sensor in global_data.get("global_sensors", []):
+            if entry_coordinators and hasattr(sensor, "unregister_coordinators"):
+                sensor.unregister_coordinators(entry_coordinators)
 
         # 3. Check if other entries remain
         other_entries = [
@@ -131,8 +125,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # 4. Cleanup global resources if this is the last entry
         if not other_entries:
-            if global_sensor and getattr(global_sensor, "entity_id", None):
-                ent_reg.async_remove(global_sensor.entity_id)
+            for sensor in global_data.get("global_sensors", []):
+                if getattr(sensor, "entity_id", None):
+                    ent_reg.async_remove(sensor.entity_id)
 
             global_device = dev_reg.async_get_device(
                 identifiers={(DOMAIN, "global_diagnostics")}
@@ -149,8 +144,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 hass.data[DOMAIN]["active_stop_count"] = _count_active_stops(hass)
 
     return unload_ok
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry when options are updated."""
-    await hass.config_entries.async_reload(entry.entry_id)

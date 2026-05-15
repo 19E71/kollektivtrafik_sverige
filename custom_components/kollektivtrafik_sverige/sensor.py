@@ -37,7 +37,14 @@ from .const import (
 )
 from .coordinator.polling import _in_time_window
 from .entity import KollektivtrafikSverigeEntity
-from .sensor_global import GlobalQuotaSensor
+from .sensor_global import (
+    CallsLast24hSensor,
+    CallsLastHourSensor,
+    FilteredDeparturesLastCycleSensor,
+    GlobalQuotaSensor,
+    NextPollSecondsSensor,
+    ThrottleFactorSensor,
+)
 
 
 async def async_setup_entry(
@@ -48,41 +55,37 @@ async def async_setup_entry(
     """Set up sensors from config entry.
 
     For each stop in the entry, creates 5 departure sensors.
-    Also sets up the global quota sensor once.
+    Also sets up the global quota sensors once.
     """
-    # Get all coordinators for this entry
     coordinators = hass.data[DOMAIN][entry.entry_id].get("coordinators", {})
 
     entities: list[SensorEntity] = []
 
-    # Create 5 departure sensors for each coordinator (stop)
     for stop_id, coordinator in coordinators.items():
         for index in range(5):
             entities.append(
                 DepartureSensor(coordinator, entry, coordinator.stop_config, index)
             )
 
-    # Add the global quota sensor
     global_data = hass.data[DOMAIN]["global"]
-    global_sensor = global_data.get("sensor")
-    ent_reg = er.async_get(hass)
+    global_sensors = global_data.setdefault("global_sensors", [])
 
-    # Check if global sensor is already in the entity registry
-    global_sensor_entity_id = "sensor.kollektivtrafik_sverige_global_api_quota_usage"
-    global_sensor_exists_in_registry = (
-        global_sensor_entity_id in ent_reg.entities if ent_reg.entities else False
-    )
-
-    # If sensor doesn't exist in registry or object is None, create new one
-    if not global_sensor_exists_in_registry or global_sensor is None:
-        global_sensor = GlobalQuotaSensor(hass, coordinators)
-        entities.append(global_sensor)
+    if not global_data.get("sensor_created") or not global_sensors:
+        global_sensors = [
+            GlobalQuotaSensor(hass, coordinators),
+            NextPollSecondsSensor(hass, coordinators),
+            ThrottleFactorSensor(hass, coordinators),
+            CallsLastHourSensor(hass, coordinators),
+            CallsLast24hSensor(hass, coordinators),
+            FilteredDeparturesLastCycleSensor(hass, coordinators),
+        ]
+        entities.extend(global_sensors)
         global_data["sensor_created"] = True
-        global_data["sensor"] = global_sensor
+        global_data["global_sensors"] = global_sensors
     else:
-        # Sensor exists in registry, just update coordinator registrations
-        if hasattr(global_sensor, "register_coordinators"):
-            global_sensor.register_coordinators(coordinators)
+        for sensor in global_sensors:
+            if hasattr(sensor, "register_coordinators"):
+                sensor.register_coordinators(coordinators)
 
     async_add_entities(entities)
 
