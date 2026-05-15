@@ -137,9 +137,7 @@ async def async_get_config_entry_diagnostics(
 
     # 6. Global sensor diagnostics
     dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, "global_diagnostics")}
-    )
+    device = dev_reg.async_get_device(identifiers={(DOMAIN, "global_diagnostics")})
 
     if device:
         global_entities = er.async_entries_for_device(ent_reg, device.id)

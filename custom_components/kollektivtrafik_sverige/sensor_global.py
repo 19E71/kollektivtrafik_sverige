@@ -40,7 +40,9 @@ class GlobalDiagnosticSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, hass: HomeAssistant, coordinators: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, hass: HomeAssistant, coordinators: dict[str, Any] | None = None
+    ) -> None:
         self._hass = hass
         self._attr_device_info = self._hass.data[DOMAIN]["global"]["device_info"]
         self._listener_cleanup: dict[str, Any] = {}
@@ -258,5 +260,8 @@ class FilteredDeparturesLastCycleSensor(GlobalDiagnosticSensor):
     def native_value(self) -> int:
         return sum(
             item.get("filtered_departures", 0)
-            for item in self._hass.data[DOMAIN].get("global", {}).get("per_stop", {}).values()
+            for item in self._hass.data[DOMAIN]
+            .get("global", {})
+            .get("per_stop", {})
+            .values()
         )
