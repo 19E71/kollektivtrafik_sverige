@@ -104,7 +104,6 @@ class KollektivtrafikApiClient:
             async with self.session.get(
                 url, params=params, timeout=timeout
             ) as response:
-
                 if response.status in (401, 403):
                     raise KollektivtrafikApiError("Unauthorized: Invalid API key")
                 if response.status == 404:
