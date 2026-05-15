@@ -7,11 +7,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -19,7 +19,7 @@ from ..api import KollektivtrafikApiClient
 from .parser import parse_departures_response
 from .filters import filter_departures
 from .queue import DepartureQueue
-from .polling import calculate_next_interval, QuotaTracker
+from .polling import calculate_next_interval, QuotaTracker, _in_time_window
 from ..const import (
     CONF_STOP_ID,
     CONF_LINE_FILTER,
@@ -35,11 +35,26 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Main orchestrator for Trafiklab realtime departures."""
 
     def __init__(
-        self, hass: HomeAssistant, client: KollektivtrafikApiClient, entry: ConfigEntry
+        self, hass: HomeAssistant, api_key: str, stop_config: dict[str, Any]
     ) -> None:
-        """Initialize the coordinator."""
-        self.entry = entry
-        self.api = client
+        """Initialize the coordinator.
+
+        Args:
+            hass: Home Assistant instance
+            api_key: API key for Trafiklab
+            stop_config: Stop configuration dict containing:
+                - id: Unique internal identifier for this stop
+                - stop_id: The actual stop ID from the API
+                - name: Display name
+                - line_filter: Line filter string
+                - direction_filter: Direction filter string
+                - time_windows: List of time window strings
+        """
+        self.hass = hass
+        self.stop_config = stop_config
+        self.api = KollektivtrafikApiClient(
+            api_key, session=async_get_clientsession(hass)
+        )
 
         self.queue = DepartureQueue()
 
@@ -49,30 +64,61 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{entry.data[CONF_STOP_ID]}",
+            name=f"{DOMAIN}_{stop_config['stop_id']}",
             # Default interval; adjusted dynamically after the first poll
             update_interval=timedelta(seconds=60),
         )
 
+    def _calculate_polling_mode(self, throttle: float, time_window_active: bool) -> str:
+        if throttle >= 2.0:
+            return "throttled"
+        if throttle > 1.0:
+            return "conservative"
+        if not time_window_active:
+            return "low_power"
+        return "normal"
+
+    def _update_global_state(
+        self,
+        now: datetime,
+        interval_sec: int,
+        filtered_departures: int,
+        service_gap: bool,
+        time_window_active: bool,
+        polling_mode: str,
+    ) -> None:
+        global_data = self.hass.data.setdefault(DOMAIN, {}).setdefault(
+            "global", {"per_stop": {}}
+        )
+        global_data["per_stop"][self.stop_config["id"]] = {
+            "last_api_update": now.isoformat(),
+            "next_poll_seconds": interval_sec,
+            "filtered_departures": filtered_departures,
+            "service_gap": service_gap,
+            "time_window_active": time_window_active,
+            "polling_mode": polling_mode,
+            "throttle_factor": self.quota.throttle_factor(now),
+        }
+
     @property
     def stop_id(self) -> str:
-        """Return stop ID from entry data."""
-        return str(self.entry.data[CONF_STOP_ID])
+        """Return stop ID from stop config."""
+        return str(self.stop_config[CONF_STOP_ID])
 
     @property
     def line_filter(self) -> str:
-        """Return line filter from entry options."""
-        return self.entry.options.get(CONF_LINE_FILTER, "")
+        """Return line filter from stop config."""
+        return self.stop_config.get(CONF_LINE_FILTER, "")
 
     @property
     def direction_filter(self) -> str | None:
-        """Return direction filter from entry options."""
-        return self.entry.options.get(CONF_DIRECTION_FILTER)
+        """Return direction filter from stop config."""
+        return self.stop_config.get(CONF_DIRECTION_FILTER)
 
     @property
     def time_windows(self) -> list[str]:
-        """Return time windows from entry options."""
-        return self.entry.options.get(CONF_TIME_WINDOWS, [])
+        """Return time windows from stop config."""
+        return self.stop_config.get(CONF_TIME_WINDOWS, [])
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch, parse, filter, queue, and compute next interval."""
@@ -113,6 +159,25 @@ class KollektivtrafikSverigeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Apply the new interval to the coordinator timer
         self.update_interval = timedelta(seconds=interval_sec)
+
+        # Record per-stop global diagnostics state for aggregation
+        exposed = self.queue.exposed()
+        next_dep = next((d for d in exposed if d is not None), None)
+        minutes = next_dep.get("minutes") if next_dep is not None else None
+        service_gap = minutes is None or minutes > 45
+        time_window_active = _in_time_window(now, self.time_windows)
+        polling_mode = self._calculate_polling_mode(
+            self.quota.throttle_factor(now), time_window_active
+        )
+
+        self._update_global_state(
+            now=now,
+            interval_sec=interval_sec,
+            filtered_departures=len(filtered),
+            service_gap=service_gap,
+            time_window_active=time_window_active,
+            polling_mode=polling_mode,
+        )
 
         _LOGGER.debug(
             "Stop %s: Fetched %d departures. Next poll in %ds (Quota level: %.1fx)",

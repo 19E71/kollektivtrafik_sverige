@@ -17,9 +17,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
@@ -32,6 +30,19 @@ from .const import (
     ATTR_TIMESTAMP,
     ATTR_TRANSPORT_MODE,
     ATTR_DEVIATIONS,
+    ATTR_SUMMARY_DEVIATION,
+    TRANSPORT_MODE_ICONS,
+    DEFAULT_TRANSPORT_ICON,
+)
+from .coordinator.polling import _in_time_window
+from .entity import KollektivtrafikSverigeEntity
+from .sensor_global import (
+    CallsLast24hSensor,
+    CallsLastHourSensor,
+    FilteredDeparturesLastCycleSensor,
+    GlobalQuotaSensor,
+    NextPollSecondsSensor,
+    ThrottleFactorSensor,
 )
 
 
@@ -40,39 +51,68 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up sensors from config entry."""
-    # Note: Accessing via "instances" sub-key as defined in your new __init__.py
-    coordinator = hass.data[DOMAIN]["instances"][entry.entry_id]
+    """Set up sensors from config entry.
+
+    For each stop in the entry, creates 5 departure sensors.
+    Also sets up the global quota sensors once.
+    """
+    coordinators = hass.data[DOMAIN][entry.entry_id].get("coordinators", {})
 
     entities: list[SensorEntity] = []
 
-    # Add the 5 departure sensors
-    entities.extend(DepartureSensor(coordinator, entry, index) for index in range(5))
+    for stop_id, coordinator in coordinators.items():
+        for index in range(5):
+            entities.append(
+                DepartureSensor(coordinator, entry, coordinator.stop_config, index)
+            )
 
-    # Add the Quota Usage sensor
-    entities.append(KollektivtrafikQuotaSensor(coordinator, entry))
+    global_data = hass.data[DOMAIN]["global"]
+    global_sensors = global_data.setdefault("global_sensors", [])
+
+    if not global_data.get("sensor_created") or not global_sensors:
+        global_sensors = [
+            GlobalQuotaSensor(hass, coordinators),
+            NextPollSecondsSensor(hass, coordinators),
+            ThrottleFactorSensor(hass, coordinators),
+            CallsLastHourSensor(hass, coordinators),
+            CallsLast24hSensor(hass, coordinators),
+            FilteredDeparturesLastCycleSensor(hass, coordinators),
+        ]
+        entities.extend(global_sensors)
+        global_data["sensor_created"] = True
+        global_data["global_sensors"] = global_sensors
+    else:
+        for sensor in global_sensors:
+            if hasattr(sensor, "register_coordinators"):
+                sensor.register_coordinators(coordinators)
 
     async_add_entities(entities)
 
 
-class DepartureSensor(CoordinatorEntity, SensorEntity):
+class DepartureSensor(KollektivtrafikSverigeEntity, SensorEntity):
     """A departure sensor with dynamic bracket naming for perfect UI sorting."""
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:bus-clock"
 
-    def __init__(self, coordinator: Any, entry: ConfigEntry, index: int) -> None:
+    def __init__(
+        self,
+        coordinator: Any,
+        entry: ConfigEntry,
+        stop_config: dict[str, Any],
+        index: int,
+    ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry = entry
-        self._index = index
-        self._attr_unique_id = f"{entry.entry_id}_departure_{index}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
-            manufacturer="19E71",
-            model="Kollektivtrafik Sverige",
-        )
+        super().__init__(coordinator, entry, stop_config, index)
+
+    @property
+    def icon(self) -> str | None:
+        """Return dynamic icon based on transport mode."""
+        data = self._get_departure()
+        if not data:
+            return DEFAULT_TRANSPORT_ICON
+
+        transport_mode = data.get(ATTR_TRANSPORT_MODE, "").upper()
+        return TRANSPORT_MODE_ICONS.get(transport_mode, DEFAULT_TRANSPORT_ICON)
 
     @property
     def name(self) -> str | None:
@@ -83,9 +123,6 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
         if not data:
             # Check if we are currently inside an active polling window
             # using the logic we already have in the coordinator
-            from .coordinator.polling import _in_time_window
-            from homeassistant.util import dt as dt_util
-
             is_active = _in_time_window(dt_util.now(), self.coordinator.time_windows)
 
             if is_active:
@@ -162,63 +199,8 @@ class DepartureSensor(CoordinatorEntity, SensorEntity):
                     ATTR_TIMESTAMP: data.get(ATTR_TIMESTAMP),
                     ATTR_TRANSPORT_MODE: data.get(ATTR_TRANSPORT_MODE),
                     ATTR_DEVIATIONS: data.get(ATTR_DEVIATIONS, []),
+                    ATTR_SUMMARY_DEVIATION: data.get(ATTR_SUMMARY_DEVIATION, ""),
                 }
             )
 
-        # Add global integration info
-        attrs["next_poll_seconds"] = self.coordinator.data.get("next_poll_seconds")
-
         return attrs
-
-    def _get_departure(self) -> dict[str, Any] | None:
-        """Safe access to the coordinator's departure list."""
-        if not self.coordinator.data or "departures" not in self.coordinator.data:
-            return None
-
-        deps = self.coordinator.data["departures"]
-        if self._index < len(deps):
-            return deps[self._index]
-        return None
-
-
-class KollektivtrafikQuotaSensor(CoordinatorEntity, SensorEntity):
-    """Sensor to track API quota usage for this specific stop."""
-
-    _attr_has_entity_name = True
-    _attr_name = "API Quota Usage"
-    _attr_icon = "mdi:chart-donut"
-    _attr_native_unit_of_measurement = "%"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
-    def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
-        """Initialize the quota sensor."""
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_quota_usage"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
-        )
-
-    @property
-    def native_value(self) -> float:
-        """Return the percentage of the daily budget used."""
-        used = self.coordinator.quota.calls_last_day()
-        total = self.coordinator.quota.daily_allowance
-
-        if total == 0:
-            return 0.0
-
-        return round((used / total) * 100, 1)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose raw call counts and throttling status."""
-        tracker = self.coordinator.quota
-        return {
-            "calls_last_24h": tracker.calls_last_day(),
-            "calls_last_hour": tracker.calls_last_hour(),
-            "daily_allowance": tracker.daily_allowance,
-            "hourly_allowance": tracker.hourly_allowance,
-            "throttle_factor": tracker.throttle_factor(),
-            "active_stops_sharing_quota": tracker.stop_count,
-        }

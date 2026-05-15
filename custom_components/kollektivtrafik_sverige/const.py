@@ -70,6 +70,23 @@ ATTR_MINUTES: Final = "minutes"
 ATTR_TIMESTAMP: Final = "timestamp"
 ATTR_TRANSPORT_MODE: Final = "transport_mode"
 ATTR_DEVIATIONS: Final = "deviations"
+ATTR_SUMMARY_DEVIATION: Final = "summary_deviation"
+
+# ---------------------------------------------------------------------------
+# Transport Mode to Icon Mapping
+# ---------------------------------------------------------------------------
+
+TRANSPORT_MODE_ICONS: Final[dict[str, str]] = {
+    "BUS": "mdi:bus",
+    "METRO": "mdi:subway-variant",
+    "TRAIN": "mdi:train",
+    "TRAM": "mdi:tram",
+    "FERRY": "mdi:ferry",
+    "COACH": "mdi:coach",
+    "WALK": "mdi:walk",
+}
+
+DEFAULT_TRANSPORT_ICON: Final = "mdi:bus-clock"
 
 # ---------------------------------------------------------------------------
 # Error messages

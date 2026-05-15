@@ -9,70 +9,145 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
+from homeassistant.helpers.device_registry import DeviceInfo
 
-from .api import KollektivtrafikApiClient
 from .const import DOMAIN, CONF_API_KEY
 from .coordinator import KollektivtrafikSverigeCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
+# This integration is configured only through config entries (UI)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Kollektivtrafik Sverige from a config entry."""
 
-    # 1. Initialize shared data and update the global stop count
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up shared Kollektivtrafik Sverige integration state."""
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(
+        "global",
+        {
+            "per_stop": {},
+            "sensor_created": False,
+            "global_sensors": [],
+            "device_info": None,
+        },
+    )
+    return True
 
-    # Calculate how many stops are currently configured
-    all_entries = hass.config_entries.async_entries(DOMAIN)
-    hass.data[DOMAIN]["active_stop_count"] = len(all_entries)
 
-    # 2. Set up the API Client
-    session = async_get_clientsession(hass)
-    client = KollektivtrafikApiClient(
-        api_key=entry.data[CONF_API_KEY],
-        session=session,
+def _count_active_stops(hass: HomeAssistant) -> int:
+    """Count total stops in all config entries."""
+    return sum(
+        len(entry.options.get("stops", []))
+        for entry in hass.config_entries.async_entries(DOMAIN)
     )
 
-    # 3. Initialize the Coordinator
-    coordinator = KollektivtrafikSverigeCoordinator(hass, client, entry)
 
-    # Fetch initial data so the sensors aren't empty on startup
-    await coordinator.async_config_entry_first_refresh()
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Kollektivtrafik Sverige from a config entry.
 
-    # 4. Store the coordinator instance using its entry_id
-    # We use a sub-key "instances" to keep it separate from our global count
-    hass.data[DOMAIN].setdefault("instances", {})[entry.entry_id] = coordinator
+    This setup creates one coordinator per stop loaded from entry.options["stops"].
+    """
+    # 1. Initialize shared data
+    hass.data.setdefault(DOMAIN, {})
+    global_data = hass.data[DOMAIN].setdefault(
+        "global",
+        {"per_stop": {}, "sensor_created": False, "sensor": None, "device_info": None},
+    )
 
-    # Listen for option changes
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    # Guarantee a clean slate for this entry
+    entry_data = {"coordinators": {}}
+    hass.data[DOMAIN][entry.entry_id] = entry_data
 
+    # 2. Get API key and stops
+    # We pull stops strictly from options as they are managed via the Options Flow
+    api_key = entry.data[CONF_API_KEY]
+    stops = entry.options.get("stops", [])
+
+    # 3. Update active stop count across all entries
+    hass.data[DOMAIN]["active_stop_count"] = _count_active_stops(hass)
+
+    # 4. Create global diagnostics device info
+    if global_data.get("device_info") is None:
+        global_data["device_info"] = DeviceInfo(
+            identifiers={(DOMAIN, "global_diagnostics")},
+            name="Kollektivtrafik Sverige (Diagnostics)",
+            manufacturer="19E71",
+            model="Integration Diagnostics",
+        )
+
+    # 5. Create coordinators for this entry
+    coordinators = entry_data["coordinators"]
+    for stop_config in stops:
+        stop_id = stop_config["id"]
+        coordinator = KollektivtrafikSverigeCoordinator(hass, api_key, stop_config)
+        await coordinator.async_config_entry_first_refresh()
+        coordinators[stop_id] = coordinator
+
+    # 7. Forward entry setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry and clean up all devices and entities."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        # Clean up the coordinator from memory
-        if "instances" in hass.data[DOMAIN]:
-            hass.data[DOMAIN]["instances"].pop(entry.entry_id)
+        domain_data = hass.data.get(DOMAIN, {})
+        global_data = domain_data.get("global", {})
+        entry_data = domain_data.get(entry.entry_id, {})
+        entry_coordinators = entry_data.get("coordinators", {})
 
-        # Update the global stop count for remaining instances
-        all_entries = hass.config_entries.async_entries(DOMAIN)
-        if all_entries:
-            hass.data[DOMAIN]["active_stop_count"] = len(all_entries)
+        dev_reg = dr.async_get(hass)
+        ent_reg = er.async_get(hass)
+
+        # 1. Remove ALL per-stop devices for this entry
+        for stop_id in list(entry_coordinators.keys()):
+            device = dev_reg.async_get_device(
+                identifiers={(DOMAIN, f"{entry.entry_id}_{stop_id}")}
+            )
+            if device:
+                dev_reg.async_remove_device(device.id)
+
+            global_data.get("per_stop", {}).pop(stop_id, None)
+
+        # 2. Unregister entry coordinators from global sensors
+        for sensor in global_data.get("global_sensors", []):
+            if entry_coordinators and hasattr(sensor, "unregister_coordinators"):
+                sensor.unregister_coordinators(entry_coordinators)
+
+        # 3. Check if other entries remain
+        other_entries = [
+            config_entry
+            for config_entry in hass.config_entries.async_entries(DOMAIN)
+            if config_entry.entry_id != entry.entry_id
+        ]
+
+        # 4. Cleanup global resources if this is the last entry
+        if not other_entries:
+            for sensor in global_data.get("global_sensors", []):
+                if getattr(sensor, "entity_id", None):
+                    ent_reg.async_remove(sensor.entity_id)
+
+            global_device = dev_reg.async_get_device(
+                identifiers={(DOMAIN, "global_diagnostics")}
+            )
+            if global_device:
+                dev_reg.async_remove_device(global_device.id)
+
+            hass.data.pop(DOMAIN, None)
         else:
-            # If no entries remain, purge the domain data entirely
-            hass.data.pop(DOMAIN)
+            if entry.entry_id in domain_data:
+                domain_data.pop(entry.entry_id, None)
+
+            if DOMAIN in hass.data:
+                hass.data[DOMAIN]["active_stop_count"] = _count_active_stops(hass)
 
     return unload_ok
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry when options are updated."""
-    await hass.config_entries.async_reload(entry.entry_id)

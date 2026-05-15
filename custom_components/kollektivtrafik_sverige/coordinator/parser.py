@@ -25,6 +25,33 @@ class NormalizedDeparture:
     minutes: int | None
     transport_mode: str | None
     deviations: list[dict[str, Any]]
+    summary_deviation: str
+
+
+def _flatten_deviations(deviations: list[dict[str, Any]]) -> str:
+    """Flatten deviation list into a human-readable summary string.
+
+    Extracts 'description' or 'header' fields from each deviation
+    and concatenates them with semicolons.
+    """
+    if not deviations:
+        return ""
+
+    summaries = []
+    for deviation in deviations:
+        if not isinstance(deviation, dict):
+            continue
+        # Try 'description' first, then 'header', then 'title'
+        text = (
+            deviation.get("description")
+            or deviation.get("header")
+            or deviation.get("title")
+            or ""
+        )
+        if text and isinstance(text, str):
+            summaries.append(text.strip())
+
+    return "; ".join(summaries)
 
 
 def _parse_iso(dt_str: Any) -> datetime | None:
@@ -113,6 +140,7 @@ def parse_departures_response(
                 minutes=minutes,
                 transport_mode=transport_mode,
                 deviations=deviations,
+                summary_deviation=_flatten_deviations(deviations),
             )
         )
 

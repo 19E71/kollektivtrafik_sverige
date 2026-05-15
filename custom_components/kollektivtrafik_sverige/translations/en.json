@@ -3,60 +3,117 @@
     "step": {
       "user": {
         "title": "API Key",
-        "description": "Enter your Trafiklab Realtime API key.\n\nYou must first create a project here:\n{project_link}\n\nThen enable the 'Trafiklab Realtime APIs' on this page:\n{realtime_api_link}",
+        "description": "Enter your Trafiklab Realtime API key.\n\nYou must first create a project here:\n{project_link}\n\nThen enable 'Trafiklab Realtime APIs' on this page:\n{realtime_api_link}",
         "data": {
           "api_key": "API Key"
-        }
-      },
-      "stop": {
-        "title": "Stop ID",
-        "description": "Enter the stop ID you want to monitor.\n\nYou can search for stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section, enter a stop name, enter your API key, and open the generated URL in your browser.",
-        "data": {
-          "stop_id": "Stop ID"
-        }
-      },
-      "filters": {
-        "title": "Filters",
-        "description": "Configure line and direction filters. Leave blank to show all departures.",
-        "data": {
-          "line_filter": "Line Filter",
-          "direction_filter": "Direction Filter"
-        }
-      },
-      "time_windows": {
-        "title": "Time Windows",
-        "description": "Optional polling windows (e.g., 06:00-10:00, 16:00-22:00).",
-        "data": {
-          "time_windows": "Time Windows"
         }
       }
     },
     "error": {
       "invalid_api_key": "The API key is invalid.",
-      "invalid_stop_id": "The stop ID is invalid.",
-      "cannot_connect": "Unable to connect to the API."
+      "cannot_connect": "Unable to connect to the API.",
+      "unknown_error": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This stop and line combination is already configured."
+      "single_instance_allowed": "Only one configuration of this integration is allowed."
     }
   },
+
   "options": {
     "step": {
       "init": {
-        "title": "Options",
-        "description": "Update filters and time windows.",
+        "title": "Manage Stops",
+        "description": "You currently have {current_stops} configured stops.",
+        "menu_options": {
+          "add_stop": "Add Stop",
+          "edit_stop": "Edit Stop",
+          "remove_stop": "Remove Stop"
+        }
+      },
+
+      "add_stop": {
+        "title": "Add Stop",
+        "description": "Search for a public transport stop by name.\n\nYou can also look up stop IDs here:\n{stop_lookup_link}\n\nScroll down to the 'Lookup' section and enter your search query.",
         "data": {
+          "search_query": "Stop Name",
+          "selected_stop": "Stop"
+        }
+      },
+
+      "stop_config": {
+        "title": "Configure Stop",
+        "description": "Set the stop name and configure optional line and direction filters. Leave filters blank to show all departures.",
+        "data": {
+          "name": "Stop Name",
           "line_filter": "Line Filter",
-          "direction_filter": "Direction Filter",
-          "time_windows": "Time Windows"
+          "direction_filter": "Direction Filter"
+        }
+      },
+
+      "edit_stop": {
+        "title": "Select Stop to Edit",
+        "description": "Choose a configured stop to modify.",
+        "data": {
+          "selected_stop": "Stop"
+        }
+      },
+
+      "edit_stop_config": {
+        "title": "Edit Stop Configuration",
+        "description": "Update the stop name and filters.",
+        "data": {
+          "name": "Stop Name",
+          "line_filter": "Line Filter",
+          "direction_filter": "Direction Filter"
+        }
+      },
+
+      "remove_stop": {
+        "title": "Remove Stop",
+        "description": "Select a stop to remove.\n\nThis action cannot be undone.",
+        "data": {
+          "selected_stop": "Stop"
         }
       }
+    },
+
+    "error": {
+      "invalid_search": "Please enter a stop name.",
+      "no_results": "No matching stops were found.",
+      "connection_error": "Unable to connect to the API.",
+      "unknown_error": "An unexpected error occurred."
+    },
+
+    "abort": {
+      "no_stops_to_edit": "No stops are currently configured.",
+      "no_stops_to_remove": "No stops are currently configured.",
+      "stop_not_found": "The selected stop could not be found.",
+
+      "stop_added": "The stop was added successfully.",
+      "stop_updated": "The stop was updated successfully.",
+      "stop_removed": "The stop was removed successfully."
     }
   },
+
   "entity": {
     "sensor": {
+      "departure_1": {
+        "name": "Departure 1"
+      },
+      "departure_2": {
+        "name": "Departure 2"
+      },
+      "departure_3": {
+        "name": "Departure 3"
+      },
+      "departure_4": {
+        "name": "Departure 4"
+      },
+      "departure_5": {
+        "name": "Departure 5"
+      },
       "api_quota_usage": {
-        "name": "API quota usage"
+        "name": "API Quota Usage"
       }
     }
   }
